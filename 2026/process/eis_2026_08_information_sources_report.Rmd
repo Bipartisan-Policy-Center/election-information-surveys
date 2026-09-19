@@ -242,13 +242,14 @@ plot_combo_bar_point <- function(sel_props, rank_props = NULL, x_label = "Weight
 
 # NEW. `props_by` is battery_props_by_party()'s by-party output (item, pid3, pct, ci_low, ci_high).
 # Dodged, not stacked - each item's selection is an independent 0/1, not a mutually-exclusive
-# category, so the three parties' bars for one item do not sum to anything meaningful.
+# category, so the three parties' bars for one item do not sum to anything meaningful. No CI
+# whiskers here (unlike the single-series charts above) - three dodged bars per item already
+# crowd the chart, and a whisker per bar reads as clutter rather than signal at that density.
 plot_battery_dodge_party <- function(props_by, x_label = "Weighted %") {
   ord <- props_by %>% group_by(item) %>% summarise(m = mean(pct), .groups = "drop") %>% arrange(m) %>% pull(item)
   props_by <- props_by %>% mutate(item = factor(item, levels = ord))
   ggplot(props_by, aes(x = pct, y = item, fill = pid3)) +
     geom_col(position = position_dodge(width = 0.75), width = 0.7) +
-    geom_linerange(aes(xmin = ci_low, xmax = ci_high), position = position_dodge(width = 0.75), linewidth = 0.7) +
     scale_fill_manual(values = PID_COLORS, name = NULL) +
     scale_x_continuous(expand = expansion(mult = c(0, .06))) +
     labs(x = x_label, y = NULL) +
