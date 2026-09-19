@@ -53,15 +53,23 @@ NEW_LABELS     <- c(search = "Online search engine", chatbot = "AI-enabled chatb
 DROPPED_LABELS <- c(fact_checking = "Fact-checking organizations", elected_officials = "Elected officials generally",
                     commentator = "Favorite commentator/analyst", civic_religious = "Civic/religious organizations")
 
-# Prints the "new in 2026" / "dropped after 2024" bar charts for one info-need battery (reg/run/won,
-# each of which has 2 new and 4 dropped items - both get a chart). Called with results='asis'.
-render_new_dropped <- function(need) {
-  new_cols <- paste0(need, "_src_", names(NEW_LABELS))
-  new_props <- map_dfr(new_cols, function(col) svy_prop(cum %>% filter(year == 2026), col, "weight_common") %>%
-                          mutate(item = NEW_LABELS[[str_remove(col, paste0("^", need, "_src_"))]], .before = 1))
-  cat("\n\n**New in 2026 (no 2024 counterpart)**\n\n")
-  print(plot_battery_bar(new_props, x_label = "Weighted % selected, 2026 only"))
+# Computes a 2026-only weighted % for each column in `cols` (named by its display label), shaped
+# like prop_table_by_item()'s output (item, year, pct, ci_low, ci_high, n) so the rows can be bound
+# directly onto a battery's common-item trend data and plotted in the SAME dumbbell chart, rather
+# than a separate one-off bar chart. plot_dumbbell() already handles an item with a point in only
+# one year cleanly: pivot_wider() fills the missing 2024 cell with NA (so it sorts as an
+# undetermined change rather than erroring), geom_line() draws nothing for a single-point group, and
+# each year's geom_point() call filters to rows that exist for that year, so no 2024 marker is drawn
+# for an item that never has one.
+new_item_trend <- function(cols) {
+  map_dfr(names(cols), function(col) {
+    svy_prop(cum %>% filter(year == 2026), col, "weight_common") %>%
+      mutate(item = cols[[col]], year = "2026", .before = 1)
+  })
+}
 
+# Prints the "dropped after 2024" bar chart for one info-need battery (reg/run/won each have 4).
+render_dropped <- function(need) {
   dropped_cols <- paste0(need, "_src_", names(DROPPED_LABELS))
   dropped_props <- map_dfr(dropped_cols, function(col) svy_prop(cum %>% filter(year == 2024), col, "weight_common") %>%
                               mutate(item = DROPPED_LABELS[[str_remove(col, paste0("^", need, "_src_"))]], .before = 1))
@@ -196,10 +204,19 @@ battery_props_by_party <- function(long_data, indicator_col, weight_col = "weigh
 ```
 
 ```{r plots, include=FALSE}
+# Orders `items` by `pct` ascending (ggplot draws factor level 1 at the BOTTOM of a horizontal
+# chart, so ascending pct puts the biggest bar at the top - the convention every chart in this
+# report already follows), except "Don't know"/"Not sure": a non-answer isn't a substantive
+# position, so it always sorts below every real item regardless of its own %.
+order_bottom_anchors <- function(items, pct, anchors = c("Don't know", "Not sure")) {
+  is_anchor <- items %in% anchors
+  c(items[is_anchor][order(pct[is_anchor])], items[!is_anchor][order(pct[!is_anchor])])
+}
+
 # Bar chart for one factor's weighted distribution (nominal items - e.g. contact mode). Ported from
 # eis_2026_07_plots_overview.R.
 plot_categorical <- function(props, x_label = "Weighted %", order = NULL) {
-  props <- if (is.null(order)) props %>% mutate(category = fct_reorder(category, pct))
+  props <- if (is.null(order)) props %>% mutate(category = factor(category, levels = order_bottom_anchors(category, pct)))
            else                props %>% mutate(category = factor(category, levels = order))
   ggplot(props, aes(x = pct, y = category)) +
     geom_col(fill = BAR_COLOR, width = 0.65) +
@@ -212,7 +229,7 @@ plot_categorical <- function(props, x_label = "Weighted %", order = NULL) {
 # (`item_labels` optional - the long-table helpers above already put display text in `item`).
 plot_battery_bar <- function(battery, item_labels = NULL, x_label = "Weighted %") {
   if (!is.null(item_labels)) battery <- battery %>% mutate(item = unname(item_labels[item]))
-  battery <- battery %>% mutate(item = fct_reorder(item, pct))
+  battery <- battery %>% mutate(item = factor(item, levels = order_bottom_anchors(item, pct)))
   ggplot(battery, aes(x = pct, y = item)) +
     geom_col(fill = BAR_COLOR, width = 0.65) +
     geom_linerange(aes(xmin = ci_low, xmax = ci_high), linewidth = 0.9) +
@@ -225,7 +242,7 @@ plot_battery_bar <- function(battery, item_labels = NULL, x_label = "Weighted %"
 # comparable. Pass rank_props = NULL to omit the overlay (used for Part 1's drill-down batteries,
 # none of which have a rank follow-up).
 plot_combo_bar_point <- function(sel_props, rank_props = NULL, x_label = "Weighted %") {
-  ord <- sel_props %>% arrange(pct) %>% pull(item)
+  ord <- order_bottom_anchors(sel_props$item, sel_props$pct)
   sel_props <- sel_props %>% mutate(item = factor(item, levels = ord))
   p <- ggplot(sel_props, aes(y = item)) +
     geom_col(aes(x = pct, fill = "Selected (top 3)"), width = 0.65) +
@@ -247,7 +264,8 @@ plot_combo_bar_point <- function(sel_props, rank_props = NULL, x_label = "Weight
 # whiskers here (unlike the single-series charts above) - three dodged bars per item already
 # crowd the chart, and a whisker per bar reads as clutter rather than signal at that density.
 plot_battery_dodge_party <- function(props_by, x_label = "Weighted %") {
-  ord <- props_by %>% group_by(item) %>% summarise(m = mean(pct), .groups = "drop") %>% arrange(m) %>% pull(item)
+  item_means <- props_by %>% group_by(item) %>% summarise(m = mean(pct), .groups = "drop")
+  ord <- order_bottom_anchors(item_means$item, item_means$m)
   props_by <- props_by %>% mutate(item = factor(item, levels = ord))
   ggplot(props_by, aes(x = pct, y = item, fill = pid3)) +
     geom_col(position = position_dodge(width = 0.75), width = 0.7) +
@@ -475,60 +493,70 @@ Scoped to the election-information-source questions covered in Parts 1-2. For ev
 
 ## Main election-news sources (BPC2)
 
-```{r part3-bpc2-common, fig.height=4}
+"Friends and/or family" is shown on the chart as a 2026-only point (no ring, no connecting line) - it did not exist as an option in the 2024 survey. There is no item in the 2024 survey that was dropped from this battery.
+
+```{r part3-bpc2-common, fig.height=4.5}
 bpc2_items <- c(tv_local = "Local/regional TV", tv_national = "National TV", radio = "Radio",
                 news_local = "Local/state print-online", news_national = "National print-online",
                 social = "Social media", search = "Search engine", podcast = "Podcasts",
                 newsletter = "Newsletters/blogs/forums", aggregator = "News aggregator apps",
                 chatbot = "AI chatbot")
 bpc2_cols <- paste0("src_", names(bpc2_items))
-bpc2_trend <- prop_table_by_item(cum, bpc2_cols) %>%
-  mutate(item = bpc2_items[str_remove(item, "^src_")])
+bpc2_trend <- bind_rows(
+  prop_table_by_item(cum, bpc2_cols) %>% mutate(item = bpc2_items[str_remove(item, "^src_")]),
+  new_item_trend(c(src_friends_family = "Friends and/or family"))
+)
 plot_dumbbell(bpc2_trend, "Weighted % selected (among top 3)")
-```
-
-```{r part3-bpc2-new, results='asis'}
-ff <- svy_prop(cum %>% filter(year == 2026), "src_friends_family", "weight_common")
-cat(sprintf("\n\n**New in 2026:** %.1f%% (95%% CI %.1f-%.1f) of 2026 respondents selected \"Friends and/or family\" as a main news source — this option did not exist in the 2024 survey. There is no item in the 2024 survey that was dropped from this battery.\n\n",
-            ff$pct, ff$ci_low, ff$ci_high))
 ```
 
 ## Registering and voting
 
-```{r part3-reg, fig.height=3}
+"Online search engine" and "AI-enabled chatbot" are shown on the chart as 2026-only points (no 2024 counterpart).
+
+```{r part3-reg, fig.height=3.5}
 reg_items <- c(local_officials = "Local/county officials", state_officials = "State officials",
                federal_site = "Federal agency/website", news_media = "News media",
                social = "Social media influencer", friends_family = "Friends/family",
                advocacy = "Election-integrity/advocacy orgs", campaign = "Candidate, campaign, or party")
-reg_trend <- prop_table_by_item(cum, paste0("reg_src_", names(reg_items))) %>%
-  mutate(item = reg_items[str_remove(item, "^reg_src_")])
+reg_trend <- bind_rows(
+  prop_table_by_item(cum, paste0("reg_src_", names(reg_items))) %>% mutate(item = reg_items[str_remove(item, "^reg_src_")]),
+  new_item_trend(setNames(NEW_LABELS, paste0("reg_src_", names(NEW_LABELS))))
+)
 plot_dumbbell(reg_trend, "Weighted % selected (among top 3)")
 ```
 
-```{r part3-reg-nd, results='asis', fig.height=2.5}
-render_new_dropped("reg")
+```{r part3-reg-dropped, results='asis', fig.height=2.5}
+render_dropped("reg")
 ```
 
 ## How elections are run
 
-```{r part3-run, fig.height=3}
-run_trend <- prop_table_by_item(cum, paste0("run_src_", names(reg_items))) %>%
-  mutate(item = reg_items[str_remove(item, "^run_src_")])
+"Online search engine" and "AI-enabled chatbot" are shown on the chart as 2026-only points (no 2024 counterpart).
+
+```{r part3-run, fig.height=3.5}
+run_trend <- bind_rows(
+  prop_table_by_item(cum, paste0("run_src_", names(reg_items))) %>% mutate(item = reg_items[str_remove(item, "^run_src_")]),
+  new_item_trend(setNames(NEW_LABELS, paste0("run_src_", names(NEW_LABELS))))
+)
 plot_dumbbell(run_trend, "Weighted % selected (among top 3)")
 ```
 
-```{r part3-run-nd, results='asis', fig.height=2.5}
-render_new_dropped("run")
+```{r part3-run-dropped, results='asis', fig.height=2.5}
+render_dropped("run")
 ```
 
 ## Who won
 
-```{r part3-won, fig.height=3}
-won_trend <- prop_table_by_item(cum, paste0("won_src_", names(reg_items))) %>%
-  mutate(item = reg_items[str_remove(item, "^won_src_")])
+"Online search engine" and "AI-enabled chatbot" are shown on the chart as 2026-only points (no 2024 counterpart).
+
+```{r part3-won, fig.height=3.5}
+won_trend <- bind_rows(
+  prop_table_by_item(cum, paste0("won_src_", names(reg_items))) %>% mutate(item = reg_items[str_remove(item, "^won_src_")]),
+  new_item_trend(setNames(NEW_LABELS, paste0("won_src_", names(NEW_LABELS))))
+)
 plot_dumbbell(won_trend, "Weighted % selected (among top 3)")
 ```
 
-```{r part3-won-nd, results='asis', fig.height=2.5}
-render_new_dropped("won")
+```{r part3-won-dropped, results='asis', fig.height=2.5}
+render_dropped("won")
 ```
