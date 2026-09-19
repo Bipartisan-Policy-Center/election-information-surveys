@@ -23,6 +23,7 @@ BAR_COLOR   <- "#2a78d6"
 RANK_COLOR  <- "#eb6834"
 PID_COLORS  <- c(Dem = "#2a78d6", Ind = "#898781", Rep = "#d03b3b")
 YEAR_COLORS <- c("2024" = "#2a78d6", "2026" = "#eb6834")
+SEEK_RAMP   <- c("#b7d3f6", "#6da7ec", "#2a78d6", "#1c5cab", "#0d366b")
 ```
 
 ```{r load-data}
@@ -312,6 +313,33 @@ plot_dumbbell <- function(df, x_label, show_ci = TRUE, sort_desc_change = TRUE) 
 ## Methodology
 
 This report covers where 2026 registered voters get election news and information, where they look for three specific kinds of election information (how to register and vote, how elections are run, who won), and how both compare to the 2024 field. Parts 1-2 use `weight`, the delivered 2026 Morning Consult weight; Part 3 uses `weight_common`, which re-rakes both years to one shared demographic target so a year-over-year difference reflects a real difference between respondents rather than a difference in what each year's own weight was correcting toward (see `eis_2026_06_design_data.R` and `eis_2026_05_trend_comparison_report.Rmd` for the fuller argument). Every proportion below carries a 95% confidence interval from `survey::svyciprop()` (logit method); a rank has no standard error of its own and is shown without one.
+
+# How Often Voters Seek Election Information
+
+BPC1 in the questionnaire - renamed to `seek_register`, `seek_elections_run`, and `seek_who_won`. Shown as the full weighted distribution across all five frequency categories, not collapsed to a single cutoff, since these categories are ordered (more/less often) but not evenly spaced. This is the item that defines "never-seekers" for Part 2 below: within each of the three information needs, a respondent who answers "Never" here is the one routed to that need's hypothetical ("would you...") arm instead of the actual one.
+
+```{r seek-freq, fig.height=3}
+seek_labels <- c(seek_register = "How to register and vote",
+                  seek_elections_run = "How elections are run",
+                  seek_who_won = "Who won an election")
+
+# Short display labels for the legend only - the full question-length category text overflows the
+# plot when used as-is. Copied verbatim from eis_2026_05_trend_comparison_report.Rmd so the same
+# category reads the same way in both reports.
+seek_freq_short <- c("Never" = "Never",
+  "Only around major election dates or deadlines (e.g. Voter registration deadlines, Election Day)" = "Only near major dates",
+  "A few times in the weeks around major election dates or deadlines" = "A few times near major dates",
+  "Regularly in the weeks around major election dates or deadlines" = "Regularly near major dates",
+  "Consistently throughout the year" = "Consistently all year")
+
+seek_props <- map_dfr(names(seek_labels), function(col) factor_props(data, col) %>% mutate(item = seek_labels[[col]], .before = 1)) %>%
+  mutate(category = seek_freq_short[category])
+
+plot_prop_stack_by(seek_props, by_col = "item", colors = setNames(SEEK_RAMP, seek_freq_short)) +
+  guides(fill = guide_legend(nrow = 2))
+```
+
+n = `r format(seek_props$n[1], big.mark = ",")`.
 
 # Part 1: Where Voters Get Election News
 
