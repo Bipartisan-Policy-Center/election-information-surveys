@@ -403,3 +403,11 @@ render_need_section <- function(need, need_title) {
 ```{r part2-reg, results='asis', fig.height=4.5}
 render_need_section("reg", "Registering and Voting")
 ```
+
+```{r part2-run, results='asis', fig.height=4.5}
+render_need_section("run", "How Elections Are Run")
+```
+
+```{r part2-won, results='asis', fig.height=4.5}
+render_need_section("won", "Who Won an Election")
+```
