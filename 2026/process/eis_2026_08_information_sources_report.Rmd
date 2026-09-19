@@ -310,13 +310,7 @@ plot_dumbbell <- function(df, x_label, show_ci = TRUE, sort_desc_change = TRUE) 
 
 ## Methodology
 
-This report covers where 2026 registered voters get election news and information, where they look for three specific kinds of election information (how to register and vote, how elections are run, who won), and how both compare to the 2024 field. Parts 1-2 use `weight`, the delivered 2026 Morning Consult weight; Part 3 uses `weight_common`, which re-rakes both years to one shared demographic target so a year-over-year difference reflects a real difference between respondents rather than a difference in what each year's own weight was correcting toward (see `eis_2026_06_design_data.R` and `eis_2026_05_trend_comparison_report.Rmd` for the fuller argument). Every proportion below carries a 95% confidence interval from `survey::svyciprop()` or `srvyr::survey_mean()`; a rank has no standard error of its own and is shown without one.
-
-```{r stub-check}
-cat("Rows in `data`:", nrow(data), "\n")
-cat("Rows in `sources.long`:", nrow(sources.long), "\n")
-cat("Rows in `cum`:", nrow(cum), " (", sum(cum$year == 2024), "2024,", sum(cum$year == 2026), "2026)\n")
-```
+This report covers where 2026 registered voters get election news and information, where they look for three specific kinds of election information (how to register and vote, how elections are run, who won), and how both compare to the 2024 field. Parts 1-2 use `weight`, the delivered 2026 Morning Consult weight; Part 3 uses `weight_common`, which re-rakes both years to one shared demographic target so a year-over-year difference reflects a real difference between respondents rather than a difference in what each year's own weight was correcting toward (see `eis_2026_06_design_data.R` and `eis_2026_05_trend_comparison_report.Rmd` for the fuller argument). Every proportion below carries a 95% confidence interval from `survey::svyciprop()` (logit method); a rank has no standard error of its own and is shown without one.
 
 # Part 1: Where Voters Get Election News
 
@@ -434,15 +428,15 @@ render_need_section <- function(need, need_title) {
 }
 ```
 
-```{r part2-reg, results='asis', fig.height=4.5}
+```{r part2-reg, results='asis', fig.height=4.5, fig.width=10}
 render_need_section("reg", "Registering and Voting")
 ```
 
-```{r part2-run, results='asis', fig.height=4.5}
+```{r part2-run, results='asis', fig.height=4.5, fig.width=10}
 render_need_section("run", "How Elections Are Run")
 ```
 
-```{r part2-won, results='asis', fig.height=4.5}
+```{r part2-won, results='asis', fig.height=4.5, fig.width=10}
 render_need_section("won", "Who Won an Election")
 ```
 
