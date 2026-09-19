@@ -13,7 +13,7 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, dpi = 96)
 knitr::opts_knit$set(upload.fun = knitr::image_uri)   # embed plots (self-contained, no pandoc)
-suppressMessages({library(tidyverse); library(survey); library(srvyr); library(knitr)})
+suppressMessages({library(tidyverse); library(survey); library(knitr)})
 theme_set(theme_minimal(base_size = 12))
 
 # Colors. BAR_COLOR/RANK_COLOR/PID_COLORS are for Parts 1-2 (2026 only); YEAR_COLORS is for Part 3
@@ -33,6 +33,26 @@ sources.long <- readRDS("output/eis_2026_sources_long.rds") %>%
   mutate(display = str_trim(str_extract(item_label, "(?<=: ).*")))
 cum          <- readRDS("output/eis_cumulative.rds") %>%
   mutate(year = factor(year, levels = c(2024, 2026)))
+```
+
+```{r pool-official-mode}
+# Contact mode is a single nominal item, not a multiselect battery, so it is the one variable in
+# this report that is not already poolable by filtering eis_2026_sources_long.rds - it never went
+# into that long table to begin with. The hypothetical arm's wording is "I would visit/call/visit"
+# vs. the actual arm's "I visit/call/visit" (confirmed directly against the data while building this
+# report); normalizing that prefix away before coalescing keeps the pooled factor at 5 levels
+# instead of silently ballooning to 8.
+normalize_mode <- function(x) str_replace(as.character(x), "^I would ", "I ")
+
+data <- data %>%
+  mutate(
+    reg_official_mode_pooled = factor(coalesce(normalize_mode(reg_act_official_mode), normalize_mode(reg_hyp_official_mode)),
+                                       levels = levels(reg_act_official_mode)),
+    run_official_mode_pooled = factor(coalesce(normalize_mode(run_act_official_mode), normalize_mode(run_hyp_official_mode)),
+                                       levels = levels(run_act_official_mode)),
+    won_official_mode_pooled = factor(coalesce(normalize_mode(won_act_official_mode), normalize_mode(won_hyp_official_mode)),
+                                       levels = levels(won_act_official_mode))
+  )
 ```
 
 ```{r helpers-wide, include=FALSE}
@@ -97,19 +117,46 @@ prep_battery_long <- function(battery_values) {
   sources.long %>% filter(battery %in% battery_values, in_base)
 }
 
+# One weighted proportion for one already-filtered subset - the same svyciprop() logit pattern as
+# svy_prop() above, reused directly rather than via srvyr/svyby.
+prop_one_group <- function(sub, indicator_col, weight_col = "weight") {
+  des <- svydesign(ids = ~1, weights = reformulate(weight_col), data = sub)
+  est <- svyciprop(reformulate(indicator_col), des, method = "logit")
+  tibble(pct = as.numeric(est) * 100, ci_low = confint(est)[1] * 100, ci_high = confint(est)[2] * 100, n = nrow(sub))
+}
+
 # `indicator_col` names a logical column the caller has already added to `long_data` (e.g.
 # `selected == "1"`, or `coalesce(rank == 1, FALSE)`). Set by_party = FALSE to collapse to one
-# weighted % per item overall; TRUE groups by pid3 as well (dropping the small number of rows with
-# no party ID - none exist in this data, but the filter is here on principle, matching
-# eis_2026_06_design_data.R's own svy_prop_by()/factor_props_by()).
+# weighted % per item overall; TRUE also splits by pid3.
+#
+# An explicit loop over item_tag (x pid3), calling svyciprop() fresh per subset, rather than
+# group_by()/summarise(survey_mean()) or svyby() - the same recipe eis_2026_06_design_data.R's
+# svy_prop_by()/factor_props_by() already use for "estimate X within each level of a grouping
+# variable" elsewhere in this project. Verified to reproduce the grouped-estimator numbers exactly
+# (0 difference) against the established wide-column pattern before use below.
 battery_props_by_party <- function(long_data, indicator_col, weight_col = "weight", by_party = TRUE) {
   if (by_party) long_data <- long_data %>% filter(!is.na(pid3))
-  design <- long_data %>% as_survey_design(ids = 1, weights = all_of(weight_col))
-  design <- if (by_party) design %>% group_by(item_tag, display, pid3) else design %>% group_by(item_tag, display)
-  design %>%
-    summarise(pct = survey_mean(.data[[indicator_col]], proportion = TRUE, prop_method = "logit", vartype = "ci") * 100,
-              n = n(), .groups = "drop") %>%
-    rename(item = display, ci_low = pct_low, ci_high = pct_upp)
+  tags <- sort(unique(as.character(long_data$item_tag)))
+  results <- list()
+  k <- 1
+  if (by_party) {
+    for (tg in tags) for (p in levels(long_data$pid3)) {
+      sub <- long_data %>% filter(item_tag == tg, pid3 == p)
+      if (nrow(sub) == 0) next
+      results[[k]] <- prop_one_group(sub, indicator_col, weight_col) %>%
+        mutate(item_tag = tg, item = sub$display[1], pid3 = p, .before = 1)
+      k <- k + 1
+    }
+  } else {
+    for (tg in tags) {
+      sub <- long_data %>% filter(item_tag == tg)
+      if (nrow(sub) == 0) next
+      results[[k]] <- prop_one_group(sub, indicator_col, weight_col) %>%
+        mutate(item_tag = tg, item = sub$display[1], .before = 1)
+      k <- k + 1
+    }
+  }
+  bind_rows(results)
 }
 ```
 
@@ -289,4 +336,70 @@ render_drilldown("BPC6", "Social media platforms")
 
 ```{r part1-bot, results='asis', fig.height=3}
 render_drilldown("BPC10", "AI chatbots")
+```
+
+# Part 2: Where Voters Look for Specific Kinds of Information
+
+```{r part2-helpers, include=FALSE}
+NEED_MODE_COL <- c(reg = "reg_official_mode_pooled", run = "run_official_mode_pooled", won = "won_official_mode_pooled")
+DRILLDOWN_TITLES <- c(social = "Social media platform", bot = "AI chatbot")
+
+render_need_section <- function(need, need_title) {
+  arms <- tribble(
+    ~arm_title,               ~battery_values,
+    "Exclude never-seekers",  paste0(need, "_act"),
+    "Include everyone",       c(paste0(need, "_act"), paste0(need, "_hyp")),
+    "Never-seekers only",     paste0(need, "_hyp")
+  )
+
+  cat("\n\n## ", need_title, "\n\n", sep = "")
+  cat("\n\n### Which sources\n\n")
+
+  for (i in seq_len(nrow(arms))) {
+    cat("\n\n#### ", arms$arm_title[i], "\n\n", sep = "")
+    long <- prep_battery_long(arms$battery_values[[i]])
+
+    sel <- battery_props_by_party(long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE)
+    rnk <- battery_props_by_party(long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = FALSE)
+    print(plot_combo_bar_point(sel, rnk, x_label = "Weighted %"))
+    cat("\n\nn =", format(sel$n[1], big.mark = ","), "\n\n")
+
+    sel_party <- battery_props_by_party(long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
+    rnk_party <- battery_props_by_party(long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = TRUE)
+    cat("\n\n**By party ID — selected**\n\n")
+    print(plot_battery_dodge_party(sel_party, x_label = "Weighted %"))
+    cat("\n\n**By party ID — ranked #1**\n\n")
+    print(plot_battery_dodge_party(rnk_party, x_label = "Weighted %"))
+  }
+
+  cat("\n\n### Drill-downs (everyone included)\n\n")
+  cat("\n\n#### Contact mode (local/state election officials)\n\n")
+
+  mode_col <- NEED_MODE_COL[[need]]
+  mode_overall <- factor_props(data, mode_col)
+  print(plot_categorical(mode_overall, x_label = "Weighted %"))
+  cat("\n\nn =", format(mode_overall$n[1], big.mark = ","), "\n\n")
+
+  mode_levels <- levels(data[[mode_col]])
+  mode_colors <- setNames(colorRampPalette(c("#b7d3f6", "#0d366b"))(length(mode_levels)), mode_levels)
+  cat("\n\n**By party ID**\n\n")
+  print(plot_prop_stack_by(factor_props_by(data, mode_col, "pid3"), by_col = "pid3", colors = mode_colors))
+
+  for (dd in names(DRILLDOWN_TITLES)) {
+    cat("\n\n#### ", DRILLDOWN_TITLES[[dd]], "\n\n", sep = "")
+    long_dd <- prep_battery_long(paste0(need, c("_act_", "_hyp_"), dd))
+
+    sel_dd <- battery_props_by_party(long_dd %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE)
+    print(plot_battery_bar(sel_dd, x_label = "Weighted %"))
+    cat("\n\nn =", format(sel_dd$n[1], big.mark = ","), "\n\n")
+
+    sel_dd_party <- battery_props_by_party(long_dd %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
+    cat("\n\n**By party ID**\n\n")
+    print(plot_battery_dodge_party(sel_dd_party, x_label = "Weighted %"))
+  }
+}
+```
+
+```{r part2-reg, results='asis', fig.height=4.5}
+render_need_section("reg", "Registering and Voting")
 ```
