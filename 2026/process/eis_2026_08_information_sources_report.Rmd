@@ -236,3 +236,57 @@ cat("Rows in `data`:", nrow(data), "\n")
 cat("Rows in `sources.long`:", nrow(sources.long), "\n")
 cat("Rows in `cum`:", nrow(cum), " (", sum(cum$year == 2024), "2024,", sum(cum$year == 2026), "2026)\n")
 ```
+
+# Part 1: Where Voters Get Election News
+
+## Main sources
+
+```{r part1-main, fig.height=4.5}
+src_cols <- var.index %>% filter(base == "BPC2", var_type == "multiselect") %>% pull(var_name)
+
+sel_props <- data %>%
+  mutate(across(all_of(src_cols), ~ as.numeric(as.character(.x)))) %>%
+  battery_props(src_cols) %>%
+  mutate(item = unname(item_display_labels(src_cols)[item]))
+
+rank_props <- factor_props(data, "src_rank_1st") %>%
+  mutate(item = unname(rank_display_labels("src_rank_1st")[category])) %>%
+  select(item, pct, ci_low, ci_high, n)
+
+plot_combo_bar_point(sel_props, rank_props, x_label = "Weighted %")
+```
+
+n = `r format(sel_props$n[1], big.mark = ",")`. Bars show the weighted % selecting each source among their top three; the diamond shows the weighted % who ranked that source their #1 choice.
+
+## Drill-downs
+
+```{r part1-drilldowns, fig.height=3.5}
+render_drilldown <- function(base_qid, section_title) {
+  cols <- var.index %>% filter(base == base_qid, var_type == "multiselect") %>% pull(var_name)
+  base_cond <- var.index %>% filter(var_name == cols[1]) %>% pull(base_condition)
+  props <- data %>% mutate(across(all_of(cols), ~ as.numeric(as.character(.x)))) %>% battery_props(cols)
+  cat("\n\n###", section_title, "\n\n")
+  print(plot_battery_bar(props, item_labels = item_display_labels(cols), x_label = "Weighted %"))
+  cat("\n\nn =", format(props$n[1], big.mark = ","), "— Base:", base_cond, "\n\n")
+}
+```
+
+```{r part1-tv, results='asis', fig.height=3}
+render_drilldown("BPC3", "National television networks")
+```
+
+```{r part1-radio, results='asis', fig.height=2.5}
+render_drilldown("BPC4", "Radio programming")
+```
+
+```{r part1-outlet, results='asis', fig.height=6}
+render_drilldown("BPC5", "Print and online news outlets")
+```
+
+```{r part1-social, results='asis', fig.height=4}
+render_drilldown("BPC6", "Social media platforms")
+```
+
+```{r part1-bot, results='asis', fig.height=3}
+render_drilldown("BPC10", "AI chatbots")
+```
