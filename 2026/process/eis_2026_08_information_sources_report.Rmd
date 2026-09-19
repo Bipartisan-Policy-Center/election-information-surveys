@@ -35,6 +35,40 @@ cum          <- readRDS("output/eis_cumulative.rds") %>%
   mutate(year = factor(year, levels = c(2024, 2026)))
 ```
 
+```{r part3-setup}
+# Every {need}_src_* / src_* column built in eis_2026_04_cumulative_data.R's E.2b arrives as a
+# 2-level factor ("0"/"1"), the same convention the existing trend report's own helpers-2 chunk
+# already converts before use.
+new_src_cols <- c(
+  paste0("src_", c("tv_local","tv_national","radio","news_local","news_national","social",
+                    "search","podcast","newsletter","aggregator","chatbot","friends_family")),
+  paste0(rep(c("reg_", "run_", "won_"), each = 6),
+         rep(c("src_search","src_chatbot","src_fact_checking","src_elected_officials",
+               "src_commentator","src_civic_religious"), 3))
+)
+cum <- cum %>% mutate(across(all_of(new_src_cols), ~ as.numeric(as.character(.x))))
+
+NEW_LABELS     <- c(search = "Online search engine", chatbot = "AI-enabled chatbot")
+DROPPED_LABELS <- c(fact_checking = "Fact-checking organizations", elected_officials = "Elected officials generally",
+                    commentator = "Favorite commentator/analyst", civic_religious = "Civic/religious organizations")
+
+# Prints the "new in 2026" / "dropped after 2024" bar charts for one info-need battery (reg/run/won,
+# each of which has 2 new and 4 dropped items - both get a chart). Called with results='asis'.
+render_new_dropped <- function(need) {
+  new_cols <- paste0(need, "_src_", names(NEW_LABELS))
+  new_props <- map_dfr(new_cols, function(col) svy_prop(cum %>% filter(year == 2026), col, "weight_common") %>%
+                          mutate(item = NEW_LABELS[[str_remove(col, paste0("^", need, "_src_"))]], .before = 1))
+  cat("\n\n**New in 2026 (no 2024 counterpart)**\n\n")
+  print(plot_battery_bar(new_props, x_label = "Weighted % selected, 2026 only"))
+
+  dropped_cols <- paste0(need, "_src_", names(DROPPED_LABELS))
+  dropped_props <- map_dfr(dropped_cols, function(col) svy_prop(cum %>% filter(year == 2024), col, "weight_common") %>%
+                              mutate(item = DROPPED_LABELS[[str_remove(col, paste0("^", need, "_src_"))]], .before = 1))
+  cat("\n\n**Dropped after 2024 (no 2026 counterpart)**\n\n")
+  print(plot_battery_bar(dropped_props, x_label = "Weighted % selected, 2024 only"))
+}
+```
+
 ```{r pool-official-mode}
 # Contact mode is a single nominal item, not a multiselect battery, so it is the one variable in
 # this report that is not already poolable by filtering eis_2026_sources_long.rds - it never went
@@ -410,4 +444,68 @@ render_need_section("run", "How Elections Are Run")
 
 ```{r part2-won, results='asis', fig.height=4.5}
 render_need_section("won", "Who Won an Election")
+```
+
+# Part 3: 2026 vs. 2024 Trend
+
+Scoped to the election-information-source questions covered in Parts 1-2. For every other survey topic (right direction, AI attitudes, confidence, concern, etc.), see `eis_2026_05_trend_comparison_report.Rmd`. All estimates below use `weight_common`.
+
+## Main election-news sources (BPC2)
+
+```{r part3-bpc2-common, fig.height=4}
+bpc2_items <- c(tv_local = "Local/regional TV", tv_national = "National TV", radio = "Radio",
+                news_local = "Local/state print-online", news_national = "National print-online",
+                social = "Social media", search = "Search engine", podcast = "Podcasts",
+                newsletter = "Newsletters/blogs/forums", aggregator = "News aggregator apps",
+                chatbot = "AI chatbot")
+bpc2_cols <- paste0("src_", names(bpc2_items))
+bpc2_trend <- prop_table_by_item(cum, bpc2_cols) %>%
+  mutate(item = bpc2_items[str_remove(item, "^src_")])
+plot_dumbbell(bpc2_trend, "Weighted % selected (among top 3)")
+```
+
+```{r part3-bpc2-new, results='asis'}
+ff <- svy_prop(cum %>% filter(year == 2026), "src_friends_family", "weight_common")
+cat(sprintf("\n\n**New in 2026:** %.1f%% (95%% CI %.1f-%.1f) of 2026 respondents selected \"Friends and/or family\" as a main news source — this option did not exist in the 2024 survey. There is no item in the 2024 survey that was dropped from this battery.\n\n",
+            ff$pct, ff$ci_low, ff$ci_high))
+```
+
+## Registering and voting
+
+```{r part3-reg, fig.height=3}
+reg_items <- c(local_officials = "Local/county officials", state_officials = "State officials",
+               federal_site = "Federal agency/website", news_media = "News media",
+               social = "Social media influencer", friends_family = "Friends/family",
+               advocacy = "Election-integrity/advocacy orgs", campaign = "Candidate, campaign, or party")
+reg_trend <- prop_table_by_item(cum, paste0("reg_src_", names(reg_items))) %>%
+  mutate(item = reg_items[str_remove(item, "^reg_src_")])
+plot_dumbbell(reg_trend, "Weighted % selected (among top 3)")
+```
+
+```{r part3-reg-nd, results='asis', fig.height=2.5}
+render_new_dropped("reg")
+```
+
+## How elections are run
+
+```{r part3-run, fig.height=3}
+run_trend <- prop_table_by_item(cum, paste0("run_src_", names(reg_items))) %>%
+  mutate(item = reg_items[str_remove(item, "^run_src_")])
+plot_dumbbell(run_trend, "Weighted % selected (among top 3)")
+```
+
+```{r part3-run-nd, results='asis', fig.height=2.5}
+render_new_dropped("run")
+```
+
+## Who won
+
+```{r part3-won, fig.height=3}
+won_trend <- prop_table_by_item(cum, paste0("won_src_", names(reg_items))) %>%
+  mutate(item = reg_items[str_remove(item, "^won_src_")])
+plot_dumbbell(won_trend, "Weighted % selected (among top 3)")
+```
+
+```{r part3-won-nd, results='asis', fig.height=2.5}
+render_new_dropped("won")
 ```
