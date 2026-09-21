@@ -96,12 +96,15 @@ save_chart <- function(plot, name, width = 7, height = 4.5, dpi = 96) {
 #   seek_freq_df                                the BPC1 seek-frequency chart
 #   part1_main_df                                one long data frame (a "metric" column separates
 #                                                the "Selected (top 3)" and "Ranked #1" series)
-#                                                behind Part 1's main combined chart - a trial run;
-#                                                every other combined chart in Part I still uses two
-#                                                separate *_selected_*/*_ranked_* objects for now
+#                                                behind Part 1's main combined chart
 #   part1_{tv|radio|outlet|social|bot}_df       Part 1's five source-specific drill-downs
-#   {need}_{arm}_{selected|ranked}_{overall|party}_df   Part 2's top-level source charts, where
-#                                                need is reg/run/won and arm is exclude/include/never
+#   {need}_{arm}_overall_df                     Part 2's top-level "selected + ranked #1" combined
+#                                                chart, need is reg/run/won and arm is exclude/
+#                                                include/never - same "metric" column as part1_main_df
+#   {need}_{arm}_{selected|ranked}_party_df     Part 2's top-level source-by-party charts (these stay
+#                                                as two separate objects - each is its own dodged
+#                                                chart, not a combined one, so there is nothing to
+#                                                merge them into)
 #   {need}_mode_{overall|party}_df              Part 2's contact-mode drill-down
 #   {need}_{social|bot}_{overall|party}_df      Part 2's social/chatbot drill-downs
 #   {bpc2|reg|run|won}_trend_df                 Part 3's main year-over-year chart per battery
@@ -390,23 +393,22 @@ plot_battery_bar <- function(battery, item_labels = NULL, x_label = "Weighted %"
     labs(x = x_label, y = NULL)
 }
 
-# A battery's weighted % selected (bar) with an optional ranked-#1 % overlay (point) on the same
-# axis and category order - both are proportions of the same base, so they are directly comparable.
-# Pass rank_props = NULL to omit the overlay (used for Part 1's drill-down batteries, none of which
-# have a rank follow-up).
-plot_combo_bar_point <- function(sel_props, rank_props = NULL, x_label = "Weighted %") {
-  ord <- order_bottom_anchors(sel_props$item, sel_props$pct)
-  sel_props <- sel_props %>% mutate(item = factor(item, levels = ord))
-  p <- ggplot(sel_props, aes(y = item)) +
-    geom_col(aes(x = pct, fill = "Selected (top 3)"), width = 0.65) +
+# A battery's weighted % selected (bar) with a ranked-#1 % overlay (point) on the same axis and
+# category order - both are proportions of the same base, so they are directly comparable. `df` is
+# one long data frame (item, metric, pct, ci_low, ci_high, n) with a "metric" column distinguishing
+# the "Selected (top 3)" rows from the "Ranked #1" rows for the same items - see Part B. If `df` has
+# no "Ranked #1" rows at all, geom_point() below is simply handed an empty data frame and draws
+# nothing, so this same function also covers a selected-only chart with no rank data.
+plot_combo_bar_point <- function(df, x_label = "Weighted %") {
+  sel <- df %>% filter(metric == "Selected (top 3)")
+  df  <- df %>% mutate(item = factor(item, levels = order_bottom_anchors(sel$item, sel$pct)))
+  ggplot(filter(df, metric == "Selected (top 3)"), aes(y = item)) +
+    geom_col(aes(x = pct, fill = metric), width = 0.65) +
     geom_linerange(aes(xmin = ci_low, xmax = ci_high), linewidth = 0.9) +
-    scale_fill_manual(values = c("Selected (top 3)" = BAR_COLOR), name = NULL)
-  if (!is.null(rank_props)) {
-    rank_props <- rank_props %>% mutate(item = factor(item, levels = ord))
-    p <- p + geom_point(data = rank_props, aes(x = pct, color = "Ranked #1"), size = 2.6, shape = 18) +
-      scale_color_manual(values = c("Ranked #1" = RANK_COLOR), name = NULL)
-  }
-  p + scale_x_continuous(expand = expansion(mult = c(0, .06))) +
+    geom_point(data = filter(df, metric == "Ranked #1"), aes(x = pct, color = metric), size = 2.6, shape = 18) +
+    scale_fill_manual(values = c("Selected (top 3)" = BAR_COLOR), name = NULL) +
+    scale_color_manual(values = c("Ranked #1" = RANK_COLOR), name = NULL) +
+    scale_x_continuous(expand = expansion(mult = c(0, .06))) +
     labs(x = x_label, y = NULL) +
     theme(legend.position = "top")
 }
@@ -530,8 +532,7 @@ src_cols <- var.index %>% filter(base == "BPC2", var_type == "multiselect") %>% 
 
 # One long data frame instead of two: a `metric` column distinguishes the "% selected" rows from
 # the "% ranked #1" rows for the same 15 items, so this single object holds everything the combined
-# chart below needs. Trial run for H.1 only - plot_combo_bar_point() (used elsewhere in Part I for
-# the same two-series chart shape) is untouched for now.
+# chart below needs (see Part B, and plot_combo_bar_point() in Part F.2).
 part1_main_df <- bind_rows(
   data %>%
     mutate(across(all_of(src_cols), ~ as.numeric(as.character(.x)))) %>%
@@ -542,24 +543,7 @@ part1_main_df <- bind_rows(
     select(item, metric, pct, ci_low, ci_high, n)
 )
 
-# Trial variant of plot_combo_bar_point() that reads one long data frame (item, metric, pct,
-# ci_low, ci_high, n) instead of two separate ones. Same visual result: the "Selected (top 3)" rows
-# supply the bars and CI whiskers, the "Ranked #1" rows supply the point overlay.
-plot_combo_bar_point_long <- function(df, x_label = "Weighted %") {
-  sel <- df %>% filter(metric == "Selected (top 3)")
-  df  <- df %>% mutate(item = factor(item, levels = order_bottom_anchors(sel$item, sel$pct)))
-  ggplot(filter(df, metric == "Selected (top 3)"), aes(y = item)) +
-    geom_col(aes(x = pct, fill = metric), width = 0.65) +
-    geom_linerange(aes(xmin = ci_low, xmax = ci_high), linewidth = 0.9) +
-    geom_point(data = filter(df, metric == "Ranked #1"), aes(x = pct, color = metric), size = 2.6, shape = 18) +
-    scale_fill_manual(values = c("Selected (top 3)" = BAR_COLOR), name = NULL) +
-    scale_color_manual(values = c("Ranked #1" = RANK_COLOR), name = NULL) +
-    scale_x_continuous(expand = expansion(mult = c(0, .06))) +
-    labs(x = x_label, y = NULL) +
-    theme(legend.position = "top")
-}
-
-p_part1_main <- plot_combo_bar_point_long(part1_main_df, x_label = "Weighted %")
+p_part1_main <- plot_combo_bar_point(part1_main_df, x_label = "Weighted %")
 save_chart(p_part1_main, "part1_main", height = 4.5)
 
 message("Part H.1: part1_main_df built (n = ",
@@ -627,8 +611,8 @@ rm(cols, p)
 # Repeated identically for each of the three information needs. Within one need, `arms` is the
 # exclude-never-seekers / include-everyone / never-seekers-only split, and `assign()` gives every
 # resulting data frame its own top-level name following Part B's convention
-# ({need}_{arm}_{selected|ranked}_{overall|party}_df) - so the loop below is DRY, but every object it
-# creates is still individually addressable afterward, e.g. `run_include_selected_party_df`.
+# ({need}_{arm}_overall_df, {need}_{arm}_{selected|ranked}_party_df) - so the loop below is DRY, but
+# every object it creates is still individually addressable afterward, e.g. `run_include_overall_df`.
 
 NEED_TITLES <- c(reg = "Registering and Voting", run = "How Elections Are Run", won = "Who Won an Election")
 DRILLDOWN_TITLES <- c(social = "Social media platform", bot = "AI chatbot")
@@ -652,24 +636,32 @@ for (need in c("reg", "run", "won")) {
     arm_key <- arms$arm_key[i]
     long <- prep_battery_long(arms$battery_values[[i]])
 
-    sel_overall <- battery_props_by_party(long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE)
-    rnk_overall <- battery_props_by_party(long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = FALSE)
-    sel_party   <- battery_props_by_party(long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
-    rnk_party   <- battery_props_by_party(long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = TRUE)
+    # One long data frame instead of two for the overall chart - a "metric" column distinguishes
+    # the "Selected (top 3)" rows from the "Ranked #1" rows, matching Part H.1's pattern. The by-
+    # party charts stay as two separate objects: each is its own dodged bar chart (plot_battery_
+    # dodge_party()), not a combined chart, so there is nothing to merge them into.
+    overall_df <- bind_rows(
+      battery_props_by_party(long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE) %>%
+        mutate(metric = "Selected (top 3)", .before = 1),
+      battery_props_by_party(long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = FALSE) %>%
+        mutate(metric = "Ranked #1", .before = 1)
+    )
+    sel_party <- battery_props_by_party(long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
+    rnk_party <- battery_props_by_party(long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = TRUE)
 
-    assign(paste0(need, "_", arm_key, "_selected_overall_df"), sel_overall)
-    assign(paste0(need, "_", arm_key, "_ranked_overall_df"), rnk_overall)
+    assign(paste0(need, "_", arm_key, "_overall_df"), overall_df)
     assign(paste0(need, "_", arm_key, "_selected_party_df"), sel_party)
     assign(paste0(need, "_", arm_key, "_ranked_party_df"), rnk_party)
 
-    save_chart(plot_combo_bar_point(sel_overall, rnk_overall, x_label = "Weighted %"),
+    save_chart(plot_combo_bar_point(overall_df, x_label = "Weighted %"),
                paste0("part2_", need, "_", arm_key, "_selected_overall"), width = 10, height = 4.5)
     save_chart(plot_battery_dodge_party(sel_party, x_label = "Weighted %"),
                paste0("part2_", need, "_", arm_key, "_selected_party"), width = 10, height = 4.5)
     save_chart(plot_battery_dodge_party(rnk_party, x_label = "Weighted %"),
                paste0("part2_", need, "_", arm_key, "_ranked_party"), width = 10, height = 4.5)
 
-    message("  ", arms$arm_title[i], ": n = ", format(sel_overall$n[1], big.mark = ","))
+    message("  ", arms$arm_title[i], ": n = ",
+            format(overall_df$n[overall_df$metric == "Selected (top 3)"][1], big.mark = ","))
   }
 
   # - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -710,7 +702,7 @@ for (need in c("reg", "run", "won")) {
   }
 }
 
-rm(arms, i, arm_key, long, sel_overall, rnk_overall, sel_party, rnk_party, mode_col, mode_overall,
+rm(arms, i, arm_key, long, overall_df, sel_party, rnk_party, mode_col, mode_overall,
    mode_party, mode_levels, mode_colors, dd, long_dd, sel_dd_overall, sel_dd_party, need)
 
 
