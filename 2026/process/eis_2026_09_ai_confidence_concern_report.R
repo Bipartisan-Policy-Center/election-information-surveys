@@ -358,3 +358,60 @@ print(plot_dumbbell(ai_mean_trend, "Weighted mean (1 = bad, 5 = good)"))
 
 ai_cat3_trend <- map_dfr(paste0(names(ai_labels), "_i_cat3"), function(col) factor_props_by_year(cum, col) %>% mutate(item = ai_labels[[str_remove(col, "_i_cat3$")]], .before = 1))
 print(plot_stacked_props(ai_cat3_trend, colors = AI_STATUS_COLORS))
+
+
+
+##### #
+#### #
+### ################################################################################################################################################# #
+# Part D. Voting experience (BPC39) ------------------------------------------------------------------------------------------------------------------------ ----
+### ################################################################################################################################################# #
+#### #
+##### #
+
+# Ported verbatim from the 05 report's "Voting Experience" section — a single trend dumbbell, 2024 vs. 2026.
+cum <- cum %>% mutate(vote_exp_positive_top2 = as.numeric(as.integer(vote_exp_positive) >= 4))
+vote_exp_trend <- prop_by_year(cum, "vote_exp_positive_top2") %>% mutate(item = "Own voting experience was positive")
+print(plot_dumbbell(vote_exp_trend, "Weighted % agreeing"))
+
+
+
+
+##### #
+#### #
+### ################################################################################################################################################# #
+# Part E. Confidence (BPC40-43) ------------------------------------------------------------------------------------------------------------------------------ ----
+### ################################################################################################################################################# #
+#### #
+##### #
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## E.1. Full 2026 distribution, all 4 items at once — new ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# New relative to the 05 report, which shows only the collapsed top-2 trend for confidence (E.2 below). No
+# party-ID breakdown here — confirmed: concern only.
+conf_labels <- c(conf_own_vote = "Your own vote", conf_local_votes = "Votes in your community",
+                  conf_state_votes = "Votes in your state", conf_national_votes = "Votes nationwide")
+
+conf_dist <- map_dfr(names(conf_labels), function(col) factor_props(data, col) %>% mutate(item = conf_labels[[col]], .before = 1))
+print(plot_prop_stack_by(conf_dist, by_col = "item", colors = setNames(RAMP_4PT, levels(data$conf_own_vote))))
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## E.2. Top-2 trend, 2024 vs. 2026 — ported verbatim ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Ported from the 05 report's "Confidence Votes Will Be Counted as Intended" section. "Confident" combines
+# "somewhat confident" and "very confident" — the top2 columns are built here on `cum` because they are not
+# pre-saved in eis_cumulative.rds; the 05 report builds this same set itself at runtime.
+conf_top2_labels <- c(conf_own_vote_top2 = "Your own vote", conf_local_votes_top2 = "Votes in your community",
+                       conf_state_votes_top2 = "Votes in your state", conf_national_votes_top2 = "Votes nationwide")
+cum <- cum %>%
+  mutate(
+    conf_own_vote_top2       = as.numeric(as.integer(conf_own_vote) >= 3),
+    conf_local_votes_top2    = as.numeric(as.integer(conf_local_votes) >= 3),
+    conf_state_votes_top2    = as.numeric(as.integer(conf_state_votes) >= 3),
+    conf_national_votes_top2 = as.numeric(as.integer(conf_national_votes) >= 3)
+  )
+conf_trend <- map_dfr(names(conf_top2_labels), function(col) prop_by_year(cum, col) %>% mutate(item = conf_top2_labels[[col]], .before = 1))
+print(plot_dumbbell(conf_trend, "Weighted % confident"))
