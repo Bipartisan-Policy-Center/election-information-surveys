@@ -94,7 +94,11 @@ save_chart <- function(plot, name, width = 7, height = 4.5, dpi = 96) {
 # output/eis_2026_08_plot_data.rds. The names follow one of these patterns:
 #
 #   seek_freq_df                                the BPC1 seek-frequency chart
-#   part1_main_selected_df / part1_main_ranked_df   the two series behind Part 1's main combined chart
+#   part1_main_df                                one long data frame (a "metric" column separates
+#                                                the "Selected (top 3)" and "Ranked #1" series)
+#                                                behind Part 1's main combined chart - a trial run;
+#                                                every other combined chart in Part I still uses two
+#                                                separate *_selected_*/*_ranked_* objects for now
 #   part1_{tv|radio|outlet|social|bot}_df       Part 1's five source-specific drill-downs
 #   {need}_{arm}_{selected|ranked}_{overall|party}_df   Part 2's top-level source charts, where
 #                                                need is reg/run/won and arm is exclude/include/never
@@ -524,20 +528,42 @@ message("Part G: seek_freq_df built (n = ", format(seek_freq_df$n[1], big.mark =
 
 src_cols <- var.index %>% filter(base == "BPC2", var_type == "multiselect") %>% pull(var_name)
 
-part1_main_selected_df <- data %>%
-  mutate(across(all_of(src_cols), ~ as.numeric(as.character(.x)))) %>%
-  battery_props(src_cols) %>%
-  mutate(item = unname(item_display_labels(src_cols)[item]))
+# One long data frame instead of two: a `metric` column distinguishes the "% selected" rows from
+# the "% ranked #1" rows for the same 15 items, so this single object holds everything the combined
+# chart below needs. Trial run for H.1 only - plot_combo_bar_point() (used elsewhere in Part I for
+# the same two-series chart shape) is untouched for now.
+part1_main_df <- bind_rows(
+  data %>%
+    mutate(across(all_of(src_cols), ~ as.numeric(as.character(.x)))) %>%
+    battery_props(src_cols) %>%
+    mutate(item = unname(item_display_labels(src_cols)[item]), metric = "Selected (top 3)", .before = 1),
+  factor_props(data, "src_rank_1st") %>%
+    mutate(item = unname(rank_display_labels("src_rank_1st")[category]), metric = "Ranked #1", .before = 1) %>%
+    select(item, metric, pct, ci_low, ci_high, n)
+)
 
-part1_main_ranked_df <- factor_props(data, "src_rank_1st") %>%
-  mutate(item = unname(rank_display_labels("src_rank_1st")[category])) %>%
-  select(item, pct, ci_low, ci_high, n)
+# Trial variant of plot_combo_bar_point() that reads one long data frame (item, metric, pct,
+# ci_low, ci_high, n) instead of two separate ones. Same visual result: the "Selected (top 3)" rows
+# supply the bars and CI whiskers, the "Ranked #1" rows supply the point overlay.
+plot_combo_bar_point_long <- function(df, x_label = "Weighted %") {
+  sel <- df %>% filter(metric == "Selected (top 3)")
+  df  <- df %>% mutate(item = factor(item, levels = order_bottom_anchors(sel$item, sel$pct)))
+  ggplot(filter(df, metric == "Selected (top 3)"), aes(y = item)) +
+    geom_col(aes(x = pct, fill = metric), width = 0.65) +
+    geom_linerange(aes(xmin = ci_low, xmax = ci_high), linewidth = 0.9) +
+    geom_point(data = filter(df, metric == "Ranked #1"), aes(x = pct, color = metric), size = 2.6, shape = 18) +
+    scale_fill_manual(values = c("Selected (top 3)" = BAR_COLOR), name = NULL) +
+    scale_color_manual(values = c("Ranked #1" = RANK_COLOR), name = NULL) +
+    scale_x_continuous(expand = expansion(mult = c(0, .06))) +
+    labs(x = x_label, y = NULL) +
+    theme(legend.position = "top")
+}
 
-p_part1_main <- plot_combo_bar_point(part1_main_selected_df, part1_main_ranked_df, x_label = "Weighted %")
+p_part1_main <- plot_combo_bar_point_long(part1_main_df, x_label = "Weighted %")
 save_chart(p_part1_main, "part1_main", height = 4.5)
 
-message("Part H.1: part1_main_selected_df / part1_main_ranked_df built (n = ",
-        format(part1_main_selected_df$n[1], big.mark = ","), ").")
+message("Part H.1: part1_main_df built (n = ",
+        format(part1_main_df$n[part1_main_df$metric == "Selected (top 3)"][1], big.mark = ","), ").")
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ## H.2. Drill-downs ----
