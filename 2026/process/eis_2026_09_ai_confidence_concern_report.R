@@ -313,9 +313,14 @@ message("\neis_2026_09_ai_confidence_concern_report.R: setup complete. `data` an
 ##### #
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - -
-## C.1. Three single-item AI questions (BPC35-37) — new, 2026 only, no 2024 counterpart ----
+## C.1. Three single-item AI questions (BPC35-37) — full 2026 distribution ----
 # - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+# ai_prevalence and ai_detect_conf have no 2024 counterpart. ai_tool_freq's question wording is IDENTICAL to
+# 2024's BPC12 (confirmed verbatim against both years' own vendor codebooks), but the two years use incompatible
+# response scales, so no full-distribution trend is shown for it either — see C.1b below for the one comparison
+# that IS defensible between the two years. What's shown here for all three items is simply their full 2026
+# distribution.
 ai_single_labels <- c(ai_prevalence  = "How much election info seen is AI-generated",
                        ai_tool_freq   = "How often uses AI tools such as chatbots",
                        ai_detect_conf = "Confidence detecting AI-generated election content")
@@ -334,6 +339,22 @@ ai_detect_conf_props <- factor_props(data, "ai_detect_conf")
 print(plot_prop_bar(ai_detect_conf_props, order = levels(data$ai_detect_conf), x_label = paste("Weighted % —", ai_single_labels[["ai_detect_conf"]])))
 cat("n =", format(ai_detect_conf_props$n[1], big.mark = ","), "\n")
 # write.csv(x = ai_detect_conf_props, file = file.path(out.dir, "eis_2026_09_ai_detect_conf.csv"), row.names = FALSE, na = "")
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## C.1b. AI tool use, 2024 vs. 2026 — new, binary comparison only ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# 2024's BPC12 and 2026's BPC36 (ai_tool_freq, above) ask the identical question ("How frequently do you choose to
+# use AI tools (like ChatGPT, Gemini, or Claude) to ask questions about elections or get information about
+# elections?") but use entirely different response scales: 2024 is calendar frequency
+# (Daily/Weekly/Monthly/Rarely/Never), 2026 is election-cycle-relative frequency (the same scale BPC1's
+# seek-frequency battery uses). There is no defensible crosswalk between, say, "Weekly" and "regularly around
+# major dates" — either could mean either — so no full-distribution trend is shown. The one thing both scales
+# share unambiguously is a "Never" anchor; `ai_tool_used` (built in eis_2026_04_cumulative_data.R Part E.7)
+# collapses each year to that one comparable cut: used AI tools for election information at all, vs. never did.
+ai_tool_used_trend <- prop_by_year(cum, "ai_tool_used") %>% mutate(item = "Uses AI tools for election info at all")
+print(plot_dumbbell(ai_tool_used_trend, "Weighted % using AI tools at all"))
+# write.csv(x = ai_tool_used_trend, file = file.path(out.dir, "eis_2026_09_ai_tool_used_trend.csv"), row.names = FALSE, na = "")
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ## C.2. The AI good/bad matrix (BPC38, 10 items) — ported verbatim, 2024 vs. 2026 ----

@@ -615,6 +615,35 @@ substantive26 <- substantive26 %>%
                      concern_overturn, concern_biased_count, concern_mail_ballots, concern_guns_intimidation,
                      concern_post_violence, concern_polling_problems))
 
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## E.7. AI tool use frequency: same question wording, incompatible response scales ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# 2024's BPC12 and 2026's BPC36 ask the identical question ("How frequently do you choose to use AI tools (like
+# ChatGPT, Gemini, or Claude) to ask questions about elections or get information about elections?") - confirmed
+# verbatim against both years' own vendor codebooks. But the two years use entirely different response scales: 2024
+# is calendar frequency (Daily/Weekly/Monthly/Rarely/Never), 2026 is election-cycle-relative frequency (the same
+# Never/only-near-major-dates/a-few-times/regularly/consistently-all-year scale BPC1's seek-frequency battery
+# uses). There is no defensible crosswalk between, say, "Weekly" and "regularly around major dates" - either could
+# mean either - so unlike E.4's vote_exp_positive, this does NOT carry a shared raw factor across years. The one
+# thing both scales share unambiguously is a "Never" anchor, so the only comparable measure built here is a binary
+# "used AI tools at all" indicator.
+substantive24 <- substantive24 %>%
+  mutate(ai_tool_used = case_when(data24.orig$BPC12 %in% 1:4 ~ 1L,
+                                  data24.orig$BPC12 == 5      ~ 0L,
+                                  TRUE                         ~ NA_integer_))  # 6 = Don't know/No opinion -> NA
+
+substantive26 <- substantive26 %>%
+  mutate(ai_tool_used = case_when(data26$ai_tool_freq != "Never" ~ 1L,
+                                  data26$ai_tool_freq == "Never" ~ 0L,
+                                  TRUE                             ~ NA_integer_))
+
+# Reporting 2024's excluded "don't know" share, the same transparency norm E.3/E.4 already follow, so anyone using
+# ai_tool_used can see the size of the excluded base.
+pct.dk.2024.ai.tool <- 100 * mean(data24.orig$BPC12 == 6, na.rm = TRUE)
+message("2024 BPC12 (AI tool use frequency) 'don't know/no opinion' share (unweighted): ",
+        round(pct.dk.2024.ai.tool, 1), "%, excluded from ai_tool_used's base.")
+
 ##### #
 #### #
 ### ################################################################################################################################################# #
@@ -673,7 +702,11 @@ stopifnot(
   "no source-seeking indicator is constant" = cumulative %>%
     select(matches("^(reg|run|won)_src_|^src_")) %>%
     summarise(across(everything(), ~ n_distinct(na.omit(.x)))) %>%
-    unlist() %>% {all(. == 2)}
+    unlist() %>% {all(. == 2)},
+  "ai_tool_used varies within both years" = cumulative %>%
+    filter(!is.na(ai_tool_used)) %>% group_by(year) %>%
+    summarise(n_distinct = n_distinct(ai_tool_used), .groups = "drop") %>%
+    pull(n_distinct) %>% {all(. == 2)}
 )
 
 message("eis_2026_04_cumulative_data.R: all validation checks passed. n = ", nrow(cumulative),
