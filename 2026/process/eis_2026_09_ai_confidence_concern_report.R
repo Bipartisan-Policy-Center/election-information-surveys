@@ -419,3 +419,85 @@ cum <- cum %>%
   )
 conf_trend <- map_dfr(names(conf_top2_labels), function(col) prop_by_year(cum, col) %>% mutate(item = conf_top2_labels[[col]], .before = 1))
 print(plot_dumbbell(conf_trend, "Weighted % confident"))
+
+
+
+##### #
+#### #
+### ################################################################################################################################################# #
+# Part F. Concern (BPC44, 14 items) --------------------------------------------------------------------------------------------------------------------- ----
+### ################################################################################################################################################# #
+#### #
+##### #
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## F.0. Setup: labels for all 14 items, and which 10 are comparable to 2024 ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+concern_labels_all <- c(
+  concern_misinfo            = "Inaccurate or misleading election information",
+  concern_ai_disinfo         = "AI used to spread disinformation",
+  concern_foreign             = "Foreign interference",
+  concern_ineligible_votes   = "Ineligible votes being counted",
+  concern_overturn            = "Attempts to overturn a fair election's results",
+  concern_biased_count        = "Biased or inaccurate ballot counting",
+  concern_mail_ballots         = "Illegal or improper mail ballot/drop box use",
+  concern_guns_intimidation    = "Guns, violence, or intimidation at voting locations",
+  concern_post_violence        = "Violence or unrest after election day",
+  concern_polling_problems     = "Long lines or equipment problems at polls",
+  concern_ice_deployment      = "ICE/federal law enforcement in your community",
+  concern_ballot_seizure       = "Federal/state seizure of ballots or voting machines",
+  concern_eligible_blocked     = "Eligible voters blocked from voting",
+  concern_gerrymander          = "Unfair district lines distorting outcomes")
+
+# The 4 items new to 2026 — confirmed absent from eis_cumulative.rds and never asked in the 2024 field's own
+# question codebook (2024/raw/field1/question_codebook.csv) — have no possible trend comparison.
+concern_new_2026   <- c("concern_ice_deployment", "concern_ballot_seizure", "concern_eligible_blocked", "concern_gerrymander")
+concern_comparable <- setdiff(names(concern_labels_all), concern_new_2026)
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## F.1. Full 2026 distribution, all 14 items at once — new ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+concern_dist <- map_dfr(names(concern_labels_all), function(col) factor_props(data, col) %>% mutate(item = concern_labels_all[[col]], .before = 1))
+print(plot_prop_stack_by(concern_dist, by_col = "item", colors = setNames(RAMP_4PT, levels(data$concern_misinfo))))
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## F.2. By-party top-2 breakdown, all 14 items at once — new ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# "Concerned" collapses "somewhat" and "very concerned" into one 0/1 indicator per item, matching the top-2
+# convention the 05 report already uses for confidence/concern. Built on `data` (all 14 items) — the 05 report
+# only builds this for the 10 comparable items (on `cum`, in F.3 below), so this extends that same convention to
+# the 4 items it doesn't cover, rather than introducing a second convention.
+data <- data %>%
+  mutate(across(all_of(names(concern_labels_all)), ~ as.numeric(as.integer(.x) >= 3), .names = "{.col}_top2"))
+
+concern_by_party <- map_dfr(names(concern_labels_all), function(col) {
+  svy_prop_by(data, paste0(col, "_top2"), "pid3") %>% mutate(item = concern_labels_all[[col]], .before = 1)
+})
+print(plot_battery_dodge_party(concern_by_party, x_label = "Weighted % concerned"))
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## F.3. Top-2 trend for the 10 comparable items, 2024 vs. 2026 — ported verbatim ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Ported from the 05 report's "Concern About Election Problems" section. Built on `cum`, for the 10 items that
+# exist there — the same top2-on-`cum` step that section's own helpers-2 chunk already does.
+concern_trend_labels <- concern_labels_all[concern_comparable]
+cum <- cum %>%
+  mutate(across(all_of(concern_comparable), ~ as.numeric(as.integer(.x) >= 3), .names = "{.col}_top2"))
+
+concern_trend <- map_dfr(names(concern_trend_labels), function(col) prop_by_year(cum, paste0(col, "_top2")) %>% mutate(item = concern_trend_labels[[col]], .before = 1))
+print(plot_dumbbell(concern_trend, "Weighted % concerned"))
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## F.4. The 4 items new to 2026, 2026 only — new ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Reuses the `_top2` columns F.2 already added to `data` — explicitly captioned as having no 2024 counterpart.
+concern_new_labels <- concern_labels_all[concern_new_2026]
+concern_new_props <- battery_props(data, paste0(concern_new_2026, "_top2")) %>%
+  mutate(item = unname(concern_new_labels[str_remove(item, "_top2$")]))
+print(plot_battery_bar(concern_new_props, x_label = "Weighted % concerned (2026 only — no 2024 counterpart)"))
+cat("n =", format(concern_new_props$n[1], big.mark = ","), "\n")
