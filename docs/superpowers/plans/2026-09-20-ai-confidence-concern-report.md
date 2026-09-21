@@ -218,7 +218,8 @@ factor_props_by_year <- function(data, factor_col, weight_col = "weight_common")
            category = sub(paste0("^", factor_col), "", names(est)),
            pct = as.numeric(est) * 100,
            ci_low = confint(est)[, 1] * 100,
-           ci_high = confint(est)[, 2] * 100)
+           ci_high = confint(est)[, 2] * 100,
+           n = nrow(sub))
   })
 }
 
@@ -431,7 +432,7 @@ ai_single_labels <- c(ai_prevalence  = "How much election info seen is AI-genera
 
 for (col in names(ai_single_labels)) {
   props <- factor_props(data, col)
-  print(plot_prop_bar(props, order = levels(data[[col]]), x_label = ai_single_labels[[col]]))
+  print(plot_prop_bar(props, order = levels(data[[col]]), x_label = paste("Weighted % —", ai_single_labels[[col]])))
   cat("n =", format(props$n[1], big.mark = ","), "\n")
 }
 
@@ -810,22 +811,22 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 
 ## G.1. How often illegal noncitizen voting occurs ----
 props <- factor_props(data, "noncitizen_freq")
-print(plot_prop_bar(props, order = levels(data$noncitizen_freq), x_label = "How often illegal noncitizen voting occurs"))
+print(plot_prop_bar(props, order = levels(data$noncitizen_freq), x_label = "Weighted % — How often illegal noncitizen voting occurs"))
 cat("n =", format(props$n[1], big.mark = ","), "\n")
 
 ## G.2. Whether illegal noncitizen voting changes election outcomes ----
 props <- factor_props(data, "noncitizen_alters")
-print(plot_prop_bar(props, x_label = "Illegal noncitizen voting changes election outcomes"))
+print(plot_prop_bar(props, x_label = "Weighted % — Illegal noncitizen voting changes election outcomes"))
 cat("n =", format(props$n[1], big.mark = ","), "\n")
 
 ## G.3. Priority: easier for eligible voters, or harder for ineligible voters ----
 props <- factor_props(data, "access_vs_integrity")
-print(plot_prop_bar(props, anchors = c("Don't know / No opinion"), x_label = "Higher voting-law priority"))
+print(plot_prop_bar(props, anchors = c("Don't know / No opinion"), x_label = "Weighted % — Higher voting-law priority"))
 cat("n =", format(props$n[1], big.mark = ","), "\n")
 
 ## G.4. Support for the Postal Service's August mail-ballot policy change ----
 props <- factor_props(data, "usps_policy_support")
-print(plot_prop_bar(props, order = levels(data$usps_policy_support), x_label = "Support for USPS mail-ballot policy change"))
+print(plot_prop_bar(props, order = levels(data$usps_policy_support), x_label = "Weighted % — Support for USPS mail-ballot policy change"))
 cat("n =", format(props$n[1], big.mark = ","), "\n")
 
 
