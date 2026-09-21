@@ -913,3 +913,12 @@ git commit -m "Add Part G: noncitizen voting, access-vs-integrity, and USPS poli
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ```
+
+---
+
+## Addendum: changes made after all 5 tasks were reviewed and merged
+
+This plan's task-by-task code blocks above are a historical record of the original build and are **not** kept byte-synced with the file after completion — unlike the in-flight fixes earlier in this document (the `vote_exp_positive_top2` and `x_label` corrections, both caught by review *before* the branch was finished), the following were separate follow-up requests handled directly, without re-running the full plan/review cycle. The design spec (`docs/superpowers/specs/2026-09-20-ai-confidence-concern-report-design.md`) is kept current; this plan is not. Two changes since completion:
+
+1. **Per-chart data frames and CSV export.** Task 2's `for` loop (C.1) and Task 5's four blocks (G.1-G.4) originally reused a single `props` variable, overwritten each iteration — fine while it only fed an immediately-printed chart, but only the last iteration's data survived afterward. Both were unrolled into distinctly-named objects (`ai_prevalence_props`, `noncitizen_alters_props`, etc.), and every chart in the file gained a commented-out `write.csv()` line immediately after it.
+2. **The `ai_tool_used` trend (new Part C.1b).** This plan's Task 2 (and the spec, originally) asserted `ai_tool_freq` had no 2024 counterpart. That was wrong — 2024's BPC12 asks the identical question, missed by an earlier keyword search that dropped a search term. The two years' response scales are incompatible (calendar vs. election-cycle-relative frequency), so `eis_2026_04_cumulative_data.R` gained a new Part E.7 building `ai_tool_used`, a binary "used at all" indicator on each year's shared "Never" anchor, and the report gained one new trend chart consuming it. See the spec's §2 and Part C for the corrected, current description.

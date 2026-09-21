@@ -20,11 +20,13 @@ All paths relative to `2026/` (the `.Rproj` working directory).
 
 No `var.index` is loaded. Every item in this report is a single ordinal/nominal question, not a multiselect battery, so display labels are hand-typed — matching `eis_2026_05_trend_comparison_report.Rmd`'s own convention for these same kinds of items (`ai_labels`, `conf_labels`, `concern_labels`, `seek_labels`, all hand-typed there) rather than looked up from the codebook.
 
-Confirmed directly against the data before writing this spec: `ai_prevalence`, `ai_tool_freq`, `ai_detect_conf` (BPC35-37), `concern_ice_deployment`, `concern_ballot_seizure`, `concern_eligible_blocked`, `concern_gerrymander` (the four concern items new to 2026), and `noncitizen_freq`, `noncitizen_alters`, `access_vs_integrity`, `usps_policy_support` (BPC45-48) do **not** exist in `eis_cumulative.rds`. I also checked `2024/raw/field1/question_codebook.csv` directly (the same per-column codebook `eis_2026_04_cumulative_data.R` already cross-references) and confirmed 2024 never asked any of these — so there is no missed opportunity here, and no pipeline edit could add a comparison that doesn't exist.
+Confirmed directly against the data before writing this spec: `ai_prevalence`, `ai_detect_conf` (BPC35, BPC37), `concern_ice_deployment`, `concern_ballot_seizure`, `concern_eligible_blocked`, `concern_gerrymander` (the four concern items new to 2026), and `noncitizen_freq`, `noncitizen_alters`, `access_vs_integrity`, `usps_policy_support` (BPC45-48) do **not** exist in `eis_cumulative.rds`, and 2024 never asked any of these (checked directly against `2024/raw/field1/question_codebook.csv`).
+
+**Correction, added after the report was first built:** `ai_tool_freq` (BPC36) was originally included in that same "no counterpart" list in error — an earlier keyword search of the 2024 codebook dropped a search term while working around an unrelated `print()` error, and missed that 2024's BPC12 asks the verbatim-identical question. The two years' response scales are incompatible (2024: calendar frequency Daily/Weekly/Monthly/Rarely/Never; 2026: election-cycle-relative frequency), so no full-distribution trend is shown — but a binary "used AI tools at all" comparison is, built on each year's shared "Never" anchor. See §4's Part C.1b and `eis_2026_04_cumulative_data.R` Part E.7.
 
 ## 3. Deliverable
 
-New file: `2026/process/eis_2026_09_ai_confidence_concern_report.R`. Plain script using the `##### #` / `#### #` nested banner-comment sections that scripts 01-04 and 07 use, with `# - - - -` subsection banners. No Rmd, no `knitr`/`rmarkdown`, no output file — every chart is a bare top-level ggplot-producing expression that auto-prints when the script is sourced or stepped through line-by-line, the same execution model `eis_2026_06_design_data.R` already documents ("Run it interactively") and relies on for its own worked examples. Multi-item views are built as one assembled long tibble (via `map_dfr()`) feeding a single top-level plot call, specifically so nothing depends on print-inside-a-loop/function behavior.
+New file: `2026/process/eis_2026_09_ai_confidence_concern_report.R`. Plain script using the `##### #` / `#### #` nested banner-comment sections that scripts 01-04 and 07 use, with `# - - - -` subsection banners. No Rmd, no `knitr`/`rmarkdown`. Every chart is an explicit `print()` call rather than a bare top-level expression — confirmed during implementation that bare top-level auto-print is unreliable under plain `source()` (what RStudio's "Source" button uses by default), so relying on it the way `eis_2026_06_design_data.R`'s own worked examples do would not have displayed every chart reliably. Multi-item views are built as one assembled long tibble (via `map_dfr()`) feeding a single top-level plot call. Nothing is written to disk by default, but each chart's underlying data frame is kept under its own name with a commented-out `write.csv()` line immediately after it, for optional export to `output/eis_2026_09_<name>.csv`.
 
 No other file is created, modified, or read. No pipeline changes — see §2's confirmation that no 2024 data exists for any item this report adds beyond what `eis_2026_05_trend_comparison_report.Rmd` already covers.
 
@@ -32,7 +34,8 @@ No other file is created, modified, or read. No pipeline changes — see §2's c
 
 ### Part C — AI (BPC35-38)
 
-- **C.1** (new, 2026-only): three bar charts, `factor_props()` + `plot_prop_bar()` (scale-ordered), one each for `ai_prevalence` (how much election info seen is AI-generated), `ai_tool_freq` (how often uses AI tools such as chatbots), `ai_detect_conf` (confidence detecting AI-generated election content). No 2024 counterpart for any of the three.
+- **C.1** (new, 2026-only): three bar charts, `factor_props()` + `plot_prop_bar()` (scale-ordered), one each for `ai_prevalence` (how much election info seen is AI-generated), `ai_tool_freq` (how often uses AI tools such as chatbots), `ai_detect_conf` (confidence detecting AI-generated election content) — each showing its full 2026 distribution. `ai_prevalence` and `ai_detect_conf` have no 2024 counterpart; `ai_tool_freq`'s question wording matches 2024's BPC12 verbatim, but the two years' response scales aren't compatible enough to show a full-distribution trend (see C.1b).
+- **C.1b** (new, `cum`/`weight_common`): one trend dumbbell for `ai_tool_used`, a binary "used AI tools for election info at all" indicator built in `eis_2026_04_cumulative_data.R` Part E.7 from each year's shared "Never" anchor — the one comparison the two years' incompatible frequency scales actually support.
 - **C.2** (ported verbatim, `cum`/`weight_common`): the existing AI good/bad-matrix trend charts (10 items) from the 05 report's "Attitudes Toward AI Use in Elections" section — the mean-score (1-5) dumbbell and the bad/neither/good stacked-by-year chart. Both already show 2026 (as one dot, or one year's stacked bar) next to 2024, so no separate 2026-only chart is built for these 10 items — that would just duplicate what's already on the page.
 
 ### Part D — Voting experience (BPC39)
@@ -84,10 +87,10 @@ For G.2 and G.3, the catch-all option ("Don't know" / "Don't know / No opinion")
 
 - No pipeline changes. No file besides the new script is created or modified.
 - No party-ID breakdown for AI or confidence — concern only, per explicit direction.
-- No 2024 comparison for BPC35-37, BPC45-48, or the four concern items new to 2026 — confirmed none exist in the 2024 field (§2).
+- No 2024 comparison for `ai_prevalence`/`ai_detect_conf` (BPC35, BPC37), BPC45-48, or the four concern items new to 2026 — confirmed none exist in the 2024 field (§2). `ai_tool_freq` (BPC36) is the one exception: a 2024 counterpart exists (BPC12) but its response scale isn't compatible with 2026's, so only the binary `ai_tool_used` comparison in C.1b is shown, not a full-distribution trend.
 - Nothing is saved to disk; running the script produces plots in the current R graphics device only.
 - This report does not re-derive or duplicate any chart that already exists unchanged in `eis_2026_05_trend_comparison_report.Rmd` — every trend chart here is a direct port (§4's "ported verbatim" items), not a rebuild.
 
 ## 8. Size estimate
 
-Part C: 3 + 2 = 5. Part D: 1. Part E: 2. Part F: 4. Part G: 4. **Total: 16 charts.**
+Part C: 3 + 1 + 2 = 6 (added: C.1b's `ai_tool_used` trend). Part D: 1. Part E: 2. Part F: 4. Part G: 4. **Total: 17 charts.**
