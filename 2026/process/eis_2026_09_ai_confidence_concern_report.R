@@ -31,8 +31,10 @@
 ####            (the four "ported verbatim" trend charts below). See 'eis_2026_06_design_data.R' for the fuller
 ####            argument.
 ####
-####  Output: none written to disk — every chart prints to the current graphics device. Run directly or
-####            interactively.
+####  Output: none written to disk by default — every chart prints to the current graphics device. Each chart's
+####            underlying data is also kept in a distinctly named data frame, with a commented-out write.csv()
+####            line immediately after it (uncomment to export that one chart's data to
+####            output/eis_2026_09_<name>.csv). Run directly or interactively.
 ####
 ####### # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 ########## # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -318,11 +320,20 @@ ai_single_labels <- c(ai_prevalence  = "How much election info seen is AI-genera
                        ai_tool_freq   = "How often uses AI tools such as chatbots",
                        ai_detect_conf = "Confidence detecting AI-generated election content")
 
-for (col in names(ai_single_labels)) {
-  props <- factor_props(data, col)
-  print(plot_prop_bar(props, order = levels(data[[col]]), x_label = paste("Weighted % —", ai_single_labels[[col]])))
-  cat("n =", format(props$n[1], big.mark = ","), "\n")
-}
+ai_prevalence_props <- factor_props(data, "ai_prevalence")
+print(plot_prop_bar(ai_prevalence_props, order = levels(data$ai_prevalence), x_label = paste("Weighted % —", ai_single_labels[["ai_prevalence"]])))
+cat("n =", format(ai_prevalence_props$n[1], big.mark = ","), "\n")
+# write.csv(x = ai_prevalence_props, file = file.path(out.dir, "eis_2026_09_ai_prevalence.csv"), row.names = FALSE, na = "")
+
+ai_tool_freq_props <- factor_props(data, "ai_tool_freq")
+print(plot_prop_bar(ai_tool_freq_props, order = levels(data$ai_tool_freq), x_label = paste("Weighted % —", ai_single_labels[["ai_tool_freq"]])))
+cat("n =", format(ai_tool_freq_props$n[1], big.mark = ","), "\n")
+# write.csv(x = ai_tool_freq_props, file = file.path(out.dir, "eis_2026_09_ai_tool_freq.csv"), row.names = FALSE, na = "")
+
+ai_detect_conf_props <- factor_props(data, "ai_detect_conf")
+print(plot_prop_bar(ai_detect_conf_props, order = levels(data$ai_detect_conf), x_label = paste("Weighted % —", ai_single_labels[["ai_detect_conf"]])))
+cat("n =", format(ai_detect_conf_props$n[1], big.mark = ","), "\n")
+# write.csv(x = ai_detect_conf_props, file = file.path(out.dir, "eis_2026_09_ai_detect_conf.csv"), row.names = FALSE, na = "")
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ## C.2. The AI good/bad matrix (BPC38, 10 items) — ported verbatim, 2024 vs. 2026 ----
@@ -355,9 +366,11 @@ for (col in paste0(names(ai_labels), "_i")) {
 ai_mean_trend <- map_dfr(paste0(names(ai_labels), "_i"), function(col) mean_by_year(cum, col) %>% mutate(item = col, .before = 1)) %>%
   mutate(item = ai_labels[str_remove(item, "_i$")], pct = estimate)
 print(plot_dumbbell(ai_mean_trend, "Weighted mean (1 = bad, 5 = good)"))
+# write.csv(x = ai_mean_trend, file = file.path(out.dir, "eis_2026_09_ai_mean_trend.csv"), row.names = FALSE, na = "")
 
 ai_cat3_trend <- map_dfr(paste0(names(ai_labels), "_i_cat3"), function(col) factor_props_by_year(cum, col) %>% mutate(item = ai_labels[[str_remove(col, "_i_cat3$")]], .before = 1))
 print(plot_stacked_props(ai_cat3_trend, colors = AI_STATUS_COLORS))
+# write.csv(x = ai_cat3_trend, file = file.path(out.dir, "eis_2026_09_ai_cat3_trend.csv"), row.names = FALSE, na = "")
 
 
 
@@ -377,6 +390,7 @@ print(plot_stacked_props(ai_cat3_trend, colors = AI_STATUS_COLORS))
 # undercounted 2026 agreement by 13 points — caught in task review, corrected before implementation.)
 vote_exp_trend <- prop_by_year(cum, "vote_exp_positive_top2") %>% mutate(item = "Own voting experience was positive")
 print(plot_dumbbell(vote_exp_trend, "Weighted % agreeing"))
+# write.csv(x = vote_exp_trend, file = file.path(out.dir, "eis_2026_09_vote_exp_trend.csv"), row.names = FALSE, na = "")
 
 
 
@@ -400,6 +414,7 @@ conf_labels <- c(conf_own_vote = "Your own vote", conf_local_votes = "Votes in y
 
 conf_dist <- map_dfr(names(conf_labels), function(col) factor_props(data, col) %>% mutate(item = conf_labels[[col]], .before = 1))
 print(plot_prop_stack_by(conf_dist, by_col = "item", colors = setNames(RAMP_4PT, levels(data$conf_own_vote))))
+# write.csv(x = conf_dist, file = file.path(out.dir, "eis_2026_09_conf_dist.csv"), row.names = FALSE, na = "")
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ## E.2. Top-2 trend, 2024 vs. 2026 — ported verbatim ----
@@ -419,6 +434,7 @@ cum <- cum %>%
   )
 conf_trend <- map_dfr(names(conf_top2_labels), function(col) prop_by_year(cum, col) %>% mutate(item = conf_top2_labels[[col]], .before = 1))
 print(plot_dumbbell(conf_trend, "Weighted % confident"))
+# write.csv(x = conf_trend, file = file.path(out.dir, "eis_2026_09_conf_trend.csv"), row.names = FALSE, na = "")
 
 
 
@@ -461,6 +477,7 @@ concern_comparable <- setdiff(names(concern_labels_all), concern_new_2026)
 
 concern_dist <- map_dfr(names(concern_labels_all), function(col) factor_props(data, col) %>% mutate(item = concern_labels_all[[col]], .before = 1))
 print(plot_prop_stack_by(concern_dist, by_col = "item", colors = setNames(RAMP_4PT, levels(data$concern_misinfo))))
+# write.csv(x = concern_dist, file = file.path(out.dir, "eis_2026_09_concern_dist.csv"), row.names = FALSE, na = "")
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ## F.2. By-party top-2 breakdown, all 14 items at once — new ----
@@ -477,6 +494,7 @@ concern_by_party <- map_dfr(names(concern_labels_all), function(col) {
   svy_prop_by(data, paste0(col, "_top2"), "pid3") %>% mutate(item = concern_labels_all[[col]], .before = 1)
 })
 print(plot_battery_dodge_party(concern_by_party, x_label = "Weighted % concerned"))
+# write.csv(x = concern_by_party, file = file.path(out.dir, "eis_2026_09_concern_by_party.csv"), row.names = FALSE, na = "")
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ## F.3. Top-2 trend for the 10 comparable items, 2024 vs. 2026 — ported verbatim ----
@@ -490,6 +508,7 @@ cum <- cum %>%
 
 concern_trend <- map_dfr(names(concern_trend_labels), function(col) prop_by_year(cum, paste0(col, "_top2")) %>% mutate(item = concern_trend_labels[[col]], .before = 1))
 print(plot_dumbbell(concern_trend, "Weighted % concerned"))
+# write.csv(x = concern_trend, file = file.path(out.dir, "eis_2026_09_concern_trend.csv"), row.names = FALSE, na = "")
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ## F.4. The 4 items new to 2026, 2026 only — new ----
@@ -501,6 +520,7 @@ concern_new_props <- battery_props(data, paste0(concern_new_2026, "_top2")) %>%
   mutate(item = unname(concern_new_labels[str_remove(item, "_top2$")]))
 print(plot_battery_bar(concern_new_props, x_label = "Weighted % concerned (2026 only — no 2024 counterpart)"))
 cat("n =", format(concern_new_props$n[1], big.mark = ","), "\n")
+# write.csv(x = concern_new_props, file = file.path(out.dir, "eis_2026_09_concern_new_props.csv"), row.names = FALSE, na = "")
 
 
 
@@ -519,24 +539,28 @@ cat("n =", format(concern_new_props$n[1], big.mark = ","), "\n")
 # (or, for access_vs_integrity, an explicit `anchors` override matching its own exact wording).
 
 ## G.1. How often illegal noncitizen voting occurs ----
-props <- factor_props(data, "noncitizen_freq")
-print(plot_prop_bar(props, order = levels(data$noncitizen_freq), x_label = "Weighted % — How often illegal noncitizen voting occurs"))
-cat("n =", format(props$n[1], big.mark = ","), "\n")
+noncitizen_freq_props <- factor_props(data, "noncitizen_freq")
+print(plot_prop_bar(noncitizen_freq_props, order = levels(data$noncitizen_freq), x_label = "Weighted % — How often illegal noncitizen voting occurs"))
+cat("n =", format(noncitizen_freq_props$n[1], big.mark = ","), "\n")
+# write.csv(x = noncitizen_freq_props, file = file.path(out.dir, "eis_2026_09_noncitizen_freq.csv"), row.names = FALSE, na = "")
 
 ## G.2. Whether illegal noncitizen voting changes election outcomes ----
-props <- factor_props(data, "noncitizen_alters")
-print(plot_prop_bar(props, x_label = "Weighted % — Illegal noncitizen voting changes election outcomes"))
-cat("n =", format(props$n[1], big.mark = ","), "\n")
+noncitizen_alters_props <- factor_props(data, "noncitizen_alters")
+print(plot_prop_bar(noncitizen_alters_props, x_label = "Weighted % — Illegal noncitizen voting changes election outcomes"))
+cat("n =", format(noncitizen_alters_props$n[1], big.mark = ","), "\n")
+# write.csv(x = noncitizen_alters_props, file = file.path(out.dir, "eis_2026_09_noncitizen_alters.csv"), row.names = FALSE, na = "")
 
 ## G.3. Priority: easier for eligible voters, or harder for ineligible voters ----
-props <- factor_props(data, "access_vs_integrity")
-print(plot_prop_bar(props, anchors = c("Don't know / No opinion"), x_label = "Weighted % — Higher voting-law priority"))
-cat("n =", format(props$n[1], big.mark = ","), "\n")
+access_vs_integrity_props <- factor_props(data, "access_vs_integrity")
+print(plot_prop_bar(access_vs_integrity_props, anchors = c("Don't know / No opinion"), x_label = "Weighted % — Higher voting-law priority"))
+cat("n =", format(access_vs_integrity_props$n[1], big.mark = ","), "\n")
+# write.csv(x = access_vs_integrity_props, file = file.path(out.dir, "eis_2026_09_access_vs_integrity.csv"), row.names = FALSE, na = "")
 
 ## G.4. Support for the Postal Service's August mail-ballot policy change ----
-props <- factor_props(data, "usps_policy_support")
-print(plot_prop_bar(props, order = levels(data$usps_policy_support), x_label = "Weighted % — Support for USPS mail-ballot policy change"))
-cat("n =", format(props$n[1], big.mark = ","), "\n")
+usps_policy_support_props <- factor_props(data, "usps_policy_support")
+print(plot_prop_bar(usps_policy_support_props, order = levels(data$usps_policy_support), x_label = "Weighted % — Support for USPS mail-ballot policy change"))
+cat("n =", format(usps_policy_support_props$n[1], big.mark = ","), "\n")
+# write.csv(x = usps_policy_support_props, file = file.path(out.dir, "eis_2026_09_usps_policy_support.csv"), row.names = FALSE, na = "")
 
 
 
