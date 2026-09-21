@@ -184,7 +184,8 @@ factor_props_by_year <- function(data, factor_col, weight_col = "weight_common")
            category = sub(paste0("^", factor_col), "", names(est)),
            pct = as.numeric(est) * 100,
            ci_low = confint(est)[, 1] * 100,
-           ci_high = confint(est)[, 2] * 100)
+           ci_high = confint(est)[, 2] * 100,
+           n = nrow(sub))
   })
 }
 
