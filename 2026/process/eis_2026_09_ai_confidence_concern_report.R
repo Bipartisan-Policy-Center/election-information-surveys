@@ -299,3 +299,62 @@ plot_stacked_props <- function(df, colors, x_label = "Weighted %") {
 
 message("\neis_2026_09_ai_confidence_concern_report.R: setup complete. `data` and `cum` are loaded; every estimator ",
         "and plot builder from Part B is in the environment. Continue running Parts C-G below.")
+
+
+
+##### #
+#### #
+### ################################################################################################################################################# #
+# Part C. AI (BPC35-38) ------------------------------------------------------------------------------------------------------------------------------------ ----
+### ################################################################################################################################################# #
+#### #
+##### #
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## C.1. Three single-item AI questions (BPC35-37) — new, 2026 only, no 2024 counterpart ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+ai_single_labels <- c(ai_prevalence  = "How much election info seen is AI-generated",
+                       ai_tool_freq   = "How often uses AI tools such as chatbots",
+                       ai_detect_conf = "Confidence detecting AI-generated election content")
+
+for (col in names(ai_single_labels)) {
+  props <- factor_props(data, col)
+  print(plot_prop_bar(props, order = levels(data[[col]]), x_label = ai_single_labels[[col]]))
+  cat("n =", format(props$n[1], big.mark = ","), "\n")
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## C.2. The AI good/bad matrix (BPC38, 10 items) — ported verbatim, 2024 vs. 2026 ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Ported from eis_2026_05_trend_comparison_report.Rmd's "Attitudes Toward AI Use in Elections" section. Already
+# shows 2026 (as one dot / one year's stacked bar) alongside 2024, so no separate 2026-only chart is built for
+# these 10 items — that would just duplicate what's already on the page.
+ai_labels <- c(
+  ai_ok_voter_candidate_info   = "Voters use AI chatbots for candidate/issue info",
+  ai_ok_voter_how_to_vote      = "Voters use AI chatbots to learn how to cast a ballot",
+  ai_ok_voter_how_to_register  = "Voters use AI chatbots to learn how to register",
+  ai_ok_voter_decide           = "Voters use AI chatbots to decide who to vote for",
+  ai_ok_voter_values_align     = "Voters use AI chatbots to compare candidates' positions to their values",
+  ai_ok_campaign_undisclosed   = "Campaigns use undisclosed AI-generated content",
+  ai_ok_campaign_disclosed     = "Campaigns use disclosed AI-generated content",
+  ai_ok_cand_photo_edit        = "Candidates use AI to edit photos/videos",
+  ai_ok_cand_microtarget       = "Candidates use AI to microtarget ads",
+  ai_ok_cand_answer_questions  = "Candidates use AI chatbots to answer voter questions")
+
+# The 1-5 reoriented integer score arrives as a factor with levels "1".."5" in `cum`; converting to numeric and
+# collapsing to bad/neither/good, exactly matching the 05 report's own helpers-2 chunk.
+cum <- cum %>% mutate(across(all_of(paste0(names(ai_labels), "_i")), ~ as.numeric(as.character(.x))))
+for (col in paste0(names(ai_labels), "_i")) {
+  cum[[paste0(col, "_cat3")]] <- factor(
+    case_when(cum[[col]] <= 2 ~ "Bad", cum[[col]] == 3 ~ "Neither", cum[[col]] >= 4 ~ "Good", TRUE ~ NA_character_),
+    levels = c("Bad", "Neither", "Good"))
+}
+
+ai_mean_trend <- map_dfr(paste0(names(ai_labels), "_i"), function(col) mean_by_year(cum, col) %>% mutate(item = col, .before = 1)) %>%
+  mutate(item = ai_labels[str_remove(item, "_i$")], pct = estimate)
+print(plot_dumbbell(ai_mean_trend, "Weighted mean (1 = bad, 5 = good)"))
+
+ai_cat3_trend <- map_dfr(paste0(names(ai_labels), "_i_cat3"), function(col) factor_props_by_year(cum, col) %>% mutate(item = ai_labels[[str_remove(col, "_i_cat3$")]], .before = 1))
+print(plot_stacked_props(ai_cat3_trend, colors = AI_STATUS_COLORS))
