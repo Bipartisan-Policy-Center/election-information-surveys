@@ -501,3 +501,44 @@ concern_new_props <- battery_props(data, paste0(concern_new_2026, "_top2")) %>%
   mutate(item = unname(concern_new_labels[str_remove(item, "_top2$")]))
 print(plot_battery_bar(concern_new_props, x_label = "Weighted % concerned (2026 only — no 2024 counterpart)"))
 cat("n =", format(concern_new_props$n[1], big.mark = ","), "\n")
+
+
+
+
+##### #
+#### #
+### ################################################################################################################################################# #
+# Part G. Noncitizen voting, access-vs-integrity, and USPS policy (BPC45-48) ------------------------------------------------------------------------------ ----
+### ################################################################################################################################################# #
+#### #
+##### #
+
+# Four 2026-only bar charts — none have a 2024 counterpart (confirmed absent from eis_cumulative.rds and from the
+# 2024 field's own question codebook). For noncitizen_alters and access_vs_integrity, the catch-all ("Don't know" /
+# "Don't know / No opinion") is pinned to the bottom rather than sorted by its own %, via plot_prop_bar()'s default
+# (or, for access_vs_integrity, an explicit `anchors` override matching its own exact wording).
+
+## G.1. How often illegal noncitizen voting occurs ----
+props <- factor_props(data, "noncitizen_freq")
+print(plot_prop_bar(props, order = levels(data$noncitizen_freq), x_label = "How often illegal noncitizen voting occurs"))
+cat("n =", format(props$n[1], big.mark = ","), "\n")
+
+## G.2. Whether illegal noncitizen voting changes election outcomes ----
+props <- factor_props(data, "noncitizen_alters")
+print(plot_prop_bar(props, x_label = "Illegal noncitizen voting changes election outcomes"))
+cat("n =", format(props$n[1], big.mark = ","), "\n")
+
+## G.3. Priority: easier for eligible voters, or harder for ineligible voters ----
+props <- factor_props(data, "access_vs_integrity")
+print(plot_prop_bar(props, anchors = c("Don't know / No opinion"), x_label = "Higher voting-law priority"))
+cat("n =", format(props$n[1], big.mark = ","), "\n")
+
+## G.4. Support for the Postal Service's August mail-ballot policy change ----
+props <- factor_props(data, "usps_policy_support")
+print(plot_prop_bar(props, order = levels(data$usps_policy_support), x_label = "Support for USPS mail-ballot policy change"))
+cat("n =", format(props$n[1], big.mark = ","), "\n")
+
+
+
+
+# The end.
