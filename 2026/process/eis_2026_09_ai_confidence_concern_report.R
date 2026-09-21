@@ -370,7 +370,11 @@ print(plot_stacked_props(ai_cat3_trend, colors = AI_STATUS_COLORS))
 ##### #
 
 # Ported verbatim from the 05 report's "Voting Experience" section — a single trend dumbbell, 2024 vs. 2026.
-cum <- cum %>% mutate(vote_exp_positive_top2 = as.numeric(as.integer(vote_exp_positive) >= 4))
+# `vote_exp_positive_top2` is already pre-built in eis_cumulative.rds by script 04 (Part E.4): it deliberately
+# excludes 2026 respondents who answered "Neither agree nor disagree" (2026 added a neutral midpoint that 2024's
+# item never had) rather than counting them as "disagree" — so it is used directly here, never recomputed. (An
+# earlier draft of this task recomputed it from the raw ordinal column, which silently dropped that exclusion and
+# undercounted 2026 agreement by 13 points — caught in task review, corrected before implementation.)
 vote_exp_trend <- prop_by_year(cum, "vote_exp_positive_top2") %>% mutate(item = "Own voting experience was positive")
 print(plot_dumbbell(vote_exp_trend, "Weighted % agreeing"))
 
