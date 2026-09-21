@@ -188,8 +188,6 @@ data <- data %>%
                                        levels = levels(won_act_official_mode))
   )
 
-NEED_MODE_COL <- c(reg = "reg_official_mode_pooled", run = "run_official_mode_pooled", won = "won_official_mode_pooled")
-
 
 
 
@@ -608,102 +606,466 @@ rm(cols, p)
 #### #
 ##### #
 
-# Repeated identically for each of the three information needs. Within one need, `arms` is the
-# exclude-never-seekers / include-everyone / never-seekers-only split, and `assign()` gives every
-# resulting data frame its own top-level name following Part B's convention
-# ({need}_{arm}_overall_df, {need}_{arm}_{selected|ranked}_party_df) - so the loop below is DRY, but
-# every object it creates is still individually addressable afterward, e.g. `run_include_overall_df`.
+# Deliberately unrolled - no loops - so every chart below is its own standalone block: the lines
+# for any one chart can be selected and copied into another script without a loop variable (need /
+# arm_key / dd) needing to make sense of it. The only thing shared within a block is the `_long`
+# object feeding one arm's or drill-down's 2-3 charts, since they are different estimates of the
+# same filtered subset - copying one of those charts means copying its `_long` line too.
+#
+# save_chart() calls are commented out through all of Part I - uncomment the ones for charts you
+# decide to keep. Each chart is also displayed (a bare `p` after building it) so running a block
+# shows the plot immediately, the same way it would print in RStudio's Plots pane.
 
-NEED_TITLES <- c(reg = "Registering and Voting", run = "How Elections Are Run", won = "Who Won an Election")
-DRILLDOWN_TITLES <- c(social = "Social media platform", bot = "AI chatbot")
 
-for (need in c("reg", "run", "won")) {
+##### #
+#### #
+### ################################################################################################################################################# #
+# Part I.1. Registering and Voting ------------------------------------------------------------------------------------------------------------------- ----
+### ################################################################################################################################################# #
+#### #
+##### #
 
-  message("Part I: ", NEED_TITLES[[need]], " -----")
+message("Part I.1: Registering and Voting -----")
 
-  # - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ## I.1. Which sources: exclude / include / never, each overall and by party ----
-  # - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## I.1.1. Which sources: exclude never-seekers ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-  arms <- tribble(
-    ~arm_key,   ~arm_title,               ~battery_values,
-    "exclude",  "Exclude never-seekers",  paste0(need, "_act"),
-    "include",  "Include everyone",       c(paste0(need, "_act"), paste0(need, "_hyp")),
-    "never",    "Never-seekers only",     paste0(need, "_hyp")
-  )
+reg_exclude_long <- prep_battery_long("reg_act")
 
-  for (i in seq_len(nrow(arms))) {
-    arm_key <- arms$arm_key[i]
-    long <- prep_battery_long(arms$battery_values[[i]])
+reg_exclude_overall_df <- bind_rows(
+  battery_props_by_party(reg_exclude_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE) %>%
+    mutate(metric = "Selected (top 3)", .before = 1),
+  battery_props_by_party(reg_exclude_long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = FALSE) %>%
+    mutate(metric = "Ranked #1", .before = 1)
+)
+p <- plot_combo_bar_point(reg_exclude_overall_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_reg_exclude_selected_overall", width = 10, height = 4.5)
 
-    # One long data frame instead of two for the overall chart - a "metric" column distinguishes
-    # the "Selected (top 3)" rows from the "Ranked #1" rows, matching Part H.1's pattern. The by-
-    # party charts stay as two separate objects: each is its own dodged bar chart (plot_battery_
-    # dodge_party()), not a combined chart, so there is nothing to merge them into.
-    overall_df <- bind_rows(
-      battery_props_by_party(long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE) %>%
-        mutate(metric = "Selected (top 3)", .before = 1),
-      battery_props_by_party(long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = FALSE) %>%
-        mutate(metric = "Ranked #1", .before = 1)
-    )
-    sel_party <- battery_props_by_party(long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
-    rnk_party <- battery_props_by_party(long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = TRUE)
+reg_exclude_selected_party_df <- battery_props_by_party(reg_exclude_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
+p <- plot_battery_dodge_party(reg_exclude_selected_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_reg_exclude_selected_party", width = 10, height = 4.5)
 
-    assign(paste0(need, "_", arm_key, "_overall_df"), overall_df)
-    assign(paste0(need, "_", arm_key, "_selected_party_df"), sel_party)
-    assign(paste0(need, "_", arm_key, "_ranked_party_df"), rnk_party)
+reg_exclude_ranked_party_df <- battery_props_by_party(reg_exclude_long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = TRUE)
+p <- plot_battery_dodge_party(reg_exclude_ranked_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_reg_exclude_ranked_party", width = 10, height = 4.5)
 
-    save_chart(plot_combo_bar_point(overall_df, x_label = "Weighted %"),
-               paste0("part2_", need, "_", arm_key, "_selected_overall"), width = 10, height = 4.5)
-    save_chart(plot_battery_dodge_party(sel_party, x_label = "Weighted %"),
-               paste0("part2_", need, "_", arm_key, "_selected_party"), width = 10, height = 4.5)
-    save_chart(plot_battery_dodge_party(rnk_party, x_label = "Weighted %"),
-               paste0("part2_", need, "_", arm_key, "_ranked_party"), width = 10, height = 4.5)
+message("  Exclude never-seekers: n = ", format(reg_exclude_overall_df$n[reg_exclude_overall_df$metric == "Selected (top 3)"][1], big.mark = ","))
 
-    message("  ", arms$arm_title[i], ": n = ",
-            format(overall_df$n[overall_df$metric == "Selected (top 3)"][1], big.mark = ","))
-  }
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## I.1.2. Which sources: include everyone ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-  # - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ## I.2. Drill-downs (everyone included): contact mode, social, chatbot ----
-  # - - - - - - - - - - - - - - - - - - - - - - - - - - -
+reg_include_long <- prep_battery_long(c("reg_act", "reg_hyp"))
 
-  mode_col <- NEED_MODE_COL[[need]]
-  mode_overall <- factor_props(data, mode_col)
-  mode_party   <- factor_props_by(data, mode_col, "pid3")
-  assign(paste0(need, "_mode_overall_df"), mode_overall)
-  assign(paste0(need, "_mode_party_df"), mode_party)
+reg_include_overall_df <- bind_rows(
+  battery_props_by_party(reg_include_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE) %>%
+    mutate(metric = "Selected (top 3)", .before = 1),
+  battery_props_by_party(reg_include_long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = FALSE) %>%
+    mutate(metric = "Ranked #1", .before = 1)
+)
+p <- plot_combo_bar_point(reg_include_overall_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_reg_include_selected_overall", width = 10, height = 4.5)
 
-  save_chart(plot_categorical(mode_overall, x_label = "Weighted %"),
-             paste0("part2_", need, "_mode_overall"), width = 10, height = 4.5)
+reg_include_selected_party_df <- battery_props_by_party(reg_include_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
+p <- plot_battery_dodge_party(reg_include_selected_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_reg_include_selected_party", width = 10, height = 4.5)
 
-  mode_levels <- levels(data[[mode_col]])
-  mode_colors <- setNames(colorRampPalette(c("#b7d3f6", "#0d366b"))(length(mode_levels)), mode_levels)
-  save_chart(plot_prop_stack_by(mode_party, by_col = "pid3", colors = mode_colors),
-             paste0("part2_", need, "_mode_party"), width = 10, height = 4.5)
+reg_include_ranked_party_df <- battery_props_by_party(reg_include_long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = TRUE)
+p <- plot_battery_dodge_party(reg_include_ranked_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_reg_include_ranked_party", width = 10, height = 4.5)
 
-  message("  Contact mode: n = ", format(mode_overall$n[1], big.mark = ","))
+message("  Include everyone: n = ", format(reg_include_overall_df$n[reg_include_overall_df$metric == "Selected (top 3)"][1], big.mark = ","))
 
-  for (dd in names(DRILLDOWN_TITLES)) {
-    long_dd <- prep_battery_long(paste0(need, c("_act_", "_hyp_"), dd))
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## I.1.3. Which sources: never-seekers only ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    sel_dd_overall <- battery_props_by_party(long_dd %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE)
-    sel_dd_party   <- battery_props_by_party(long_dd %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
+reg_never_long <- prep_battery_long("reg_hyp")
 
-    assign(paste0(need, "_", dd, "_overall_df"), sel_dd_overall)
-    assign(paste0(need, "_", dd, "_party_df"), sel_dd_party)
+reg_never_overall_df <- bind_rows(
+  battery_props_by_party(reg_never_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE) %>%
+    mutate(metric = "Selected (top 3)", .before = 1),
+  battery_props_by_party(reg_never_long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = FALSE) %>%
+    mutate(metric = "Ranked #1", .before = 1)
+)
+p <- plot_combo_bar_point(reg_never_overall_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_reg_never_selected_overall", width = 10, height = 4.5)
 
-    save_chart(plot_battery_bar(sel_dd_overall, x_label = "Weighted %"),
-               paste0("part2_", need, "_", dd, "_overall"), width = 10, height = 4.5)
-    save_chart(plot_battery_dodge_party(sel_dd_party, x_label = "Weighted %"),
-               paste0("part2_", need, "_", dd, "_party"), width = 10, height = 4.5)
+reg_never_selected_party_df <- battery_props_by_party(reg_never_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
+p <- plot_battery_dodge_party(reg_never_selected_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_reg_never_selected_party", width = 10, height = 4.5)
 
-    message("  ", DRILLDOWN_TITLES[[dd]], ": n = ", format(sel_dd_overall$n[1], big.mark = ","))
-  }
-}
+reg_never_ranked_party_df <- battery_props_by_party(reg_never_long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = TRUE)
+p <- plot_battery_dodge_party(reg_never_ranked_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_reg_never_ranked_party", width = 10, height = 4.5)
 
-rm(arms, i, arm_key, long, overall_df, sel_party, rnk_party, mode_col, mode_overall,
-   mode_party, mode_levels, mode_colors, dd, long_dd, sel_dd_overall, sel_dd_party, need)
+message("  Never-seekers only: n = ", format(reg_never_overall_df$n[reg_never_overall_df$metric == "Selected (top 3)"][1], big.mark = ","))
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## I.1.4. Drill-down: contact mode (local/state election officials) ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+reg_mode_overall_df <- factor_props(data, "reg_official_mode_pooled")
+p <- plot_categorical(reg_mode_overall_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_reg_mode_overall", width = 10, height = 4.5)
+
+reg_mode_party_df <- factor_props_by(data, "reg_official_mode_pooled", "pid3")
+reg_mode_colors <- setNames(colorRampPalette(c("#b7d3f6", "#0d366b"))(length(levels(data$reg_official_mode_pooled))),
+                            levels(data$reg_official_mode_pooled))
+p <- plot_prop_stack_by(reg_mode_party_df, by_col = "pid3", colors = reg_mode_colors)
+p
+# save_chart(p, "part2_reg_mode_party", width = 10, height = 4.5)
+
+message("  Contact mode: n = ", format(reg_mode_overall_df$n[1], big.mark = ","))
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## I.1.5. Drill-down: social media platform ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+reg_social_long <- prep_battery_long(c("reg_act_social", "reg_hyp_social"))
+
+reg_social_overall_df <- battery_props_by_party(reg_social_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE)
+p <- plot_battery_bar(reg_social_overall_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_reg_social_overall", width = 10, height = 4.5)
+
+reg_social_party_df <- battery_props_by_party(reg_social_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
+p <- plot_battery_dodge_party(reg_social_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_reg_social_party", width = 10, height = 4.5)
+
+message("  Social media platform: n = ", format(reg_social_overall_df$n[1], big.mark = ","))
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## I.1.6. Drill-down: AI chatbot ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+reg_bot_long <- prep_battery_long(c("reg_act_bot", "reg_hyp_bot"))
+
+reg_bot_overall_df <- battery_props_by_party(reg_bot_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE)
+p <- plot_battery_bar(reg_bot_overall_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_reg_bot_overall", width = 10, height = 4.5)
+
+reg_bot_party_df <- battery_props_by_party(reg_bot_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
+p <- plot_battery_dodge_party(reg_bot_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_reg_bot_party", width = 10, height = 4.5)
+
+message("  AI chatbot: n = ", format(reg_bot_overall_df$n[1], big.mark = ","))
+
+
+
+
+##### #
+#### #
+### ################################################################################################################################################# #
+# Part I.2. How Elections Are Run -------------------------------------------------------------------------------------------------------------------- ----
+### ################################################################################################################################################# #
+#### #
+##### #
+
+message("Part I.2: How Elections Are Run -----")
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## I.2.1. Which sources: exclude never-seekers ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+run_exclude_long <- prep_battery_long("run_act")
+
+run_exclude_overall_df <- bind_rows(
+  battery_props_by_party(run_exclude_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE) %>%
+    mutate(metric = "Selected (top 3)", .before = 1),
+  battery_props_by_party(run_exclude_long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = FALSE) %>%
+    mutate(metric = "Ranked #1", .before = 1)
+)
+p <- plot_combo_bar_point(run_exclude_overall_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_run_exclude_selected_overall", width = 10, height = 4.5)
+
+run_exclude_selected_party_df <- battery_props_by_party(run_exclude_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
+p <- plot_battery_dodge_party(run_exclude_selected_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_run_exclude_selected_party", width = 10, height = 4.5)
+
+run_exclude_ranked_party_df <- battery_props_by_party(run_exclude_long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = TRUE)
+p <- plot_battery_dodge_party(run_exclude_ranked_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_run_exclude_ranked_party", width = 10, height = 4.5)
+
+message("  Exclude never-seekers: n = ", format(run_exclude_overall_df$n[run_exclude_overall_df$metric == "Selected (top 3)"][1], big.mark = ","))
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## I.2.2. Which sources: include everyone ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+run_include_long <- prep_battery_long(c("run_act", "run_hyp"))
+
+run_include_overall_df <- bind_rows(
+  battery_props_by_party(run_include_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE) %>%
+    mutate(metric = "Selected (top 3)", .before = 1),
+  battery_props_by_party(run_include_long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = FALSE) %>%
+    mutate(metric = "Ranked #1", .before = 1)
+)
+p <- plot_combo_bar_point(run_include_overall_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_run_include_selected_overall", width = 10, height = 4.5)
+
+run_include_selected_party_df <- battery_props_by_party(run_include_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
+p <- plot_battery_dodge_party(run_include_selected_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_run_include_selected_party", width = 10, height = 4.5)
+
+run_include_ranked_party_df <- battery_props_by_party(run_include_long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = TRUE)
+p <- plot_battery_dodge_party(run_include_ranked_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_run_include_ranked_party", width = 10, height = 4.5)
+
+message("  Include everyone: n = ", format(run_include_overall_df$n[run_include_overall_df$metric == "Selected (top 3)"][1], big.mark = ","))
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## I.2.3. Which sources: never-seekers only ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+run_never_long <- prep_battery_long("run_hyp")
+
+run_never_overall_df <- bind_rows(
+  battery_props_by_party(run_never_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE) %>%
+    mutate(metric = "Selected (top 3)", .before = 1),
+  battery_props_by_party(run_never_long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = FALSE) %>%
+    mutate(metric = "Ranked #1", .before = 1)
+)
+p <- plot_combo_bar_point(run_never_overall_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_run_never_selected_overall", width = 10, height = 4.5)
+
+run_never_selected_party_df <- battery_props_by_party(run_never_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
+p <- plot_battery_dodge_party(run_never_selected_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_run_never_selected_party", width = 10, height = 4.5)
+
+run_never_ranked_party_df <- battery_props_by_party(run_never_long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = TRUE)
+p <- plot_battery_dodge_party(run_never_ranked_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_run_never_ranked_party", width = 10, height = 4.5)
+
+message("  Never-seekers only: n = ", format(run_never_overall_df$n[run_never_overall_df$metric == "Selected (top 3)"][1], big.mark = ","))
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## I.2.4. Drill-down: contact mode (local/state election officials) ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+run_mode_overall_df <- factor_props(data, "run_official_mode_pooled")
+p <- plot_categorical(run_mode_overall_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_run_mode_overall", width = 10, height = 4.5)
+
+run_mode_party_df <- factor_props_by(data, "run_official_mode_pooled", "pid3")
+run_mode_colors <- setNames(colorRampPalette(c("#b7d3f6", "#0d366b"))(length(levels(data$run_official_mode_pooled))),
+                            levels(data$run_official_mode_pooled))
+p <- plot_prop_stack_by(run_mode_party_df, by_col = "pid3", colors = run_mode_colors)
+p
+# save_chart(p, "part2_run_mode_party", width = 10, height = 4.5)
+
+message("  Contact mode: n = ", format(run_mode_overall_df$n[1], big.mark = ","))
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## I.2.5. Drill-down: social media platform ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+run_social_long <- prep_battery_long(c("run_act_social", "run_hyp_social"))
+
+run_social_overall_df <- battery_props_by_party(run_social_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE)
+p <- plot_battery_bar(run_social_overall_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_run_social_overall", width = 10, height = 4.5)
+
+run_social_party_df <- battery_props_by_party(run_social_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
+p <- plot_battery_dodge_party(run_social_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_run_social_party", width = 10, height = 4.5)
+
+message("  Social media platform: n = ", format(run_social_overall_df$n[1], big.mark = ","))
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## I.2.6. Drill-down: AI chatbot ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+run_bot_long <- prep_battery_long(c("run_act_bot", "run_hyp_bot"))
+
+run_bot_overall_df <- battery_props_by_party(run_bot_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE)
+p <- plot_battery_bar(run_bot_overall_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_run_bot_overall", width = 10, height = 4.5)
+
+run_bot_party_df <- battery_props_by_party(run_bot_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
+p <- plot_battery_dodge_party(run_bot_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_run_bot_party", width = 10, height = 4.5)
+
+message("  AI chatbot: n = ", format(run_bot_overall_df$n[1], big.mark = ","))
+
+
+
+
+##### #
+#### #
+### ################################################################################################################################################# #
+# Part I.3. Who Won an Election ---------------------------------------------------------------------------------------------------------------------- ----
+### ################################################################################################################################################# #
+#### #
+##### #
+
+message("Part I.3: Who Won an Election -----")
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## I.3.1. Which sources: exclude never-seekers ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+won_exclude_long <- prep_battery_long("won_act")
+
+won_exclude_overall_df <- bind_rows(
+  battery_props_by_party(won_exclude_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE) %>%
+    mutate(metric = "Selected (top 3)", .before = 1),
+  battery_props_by_party(won_exclude_long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = FALSE) %>%
+    mutate(metric = "Ranked #1", .before = 1)
+)
+p <- plot_combo_bar_point(won_exclude_overall_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_won_exclude_selected_overall", width = 10, height = 4.5)
+
+won_exclude_selected_party_df <- battery_props_by_party(won_exclude_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
+p <- plot_battery_dodge_party(won_exclude_selected_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_won_exclude_selected_party", width = 10, height = 4.5)
+
+won_exclude_ranked_party_df <- battery_props_by_party(won_exclude_long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = TRUE)
+p <- plot_battery_dodge_party(won_exclude_ranked_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_won_exclude_ranked_party", width = 10, height = 4.5)
+
+message("  Exclude never-seekers: n = ", format(won_exclude_overall_df$n[won_exclude_overall_df$metric == "Selected (top 3)"][1], big.mark = ","))
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## I.3.2. Which sources: include everyone ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+won_include_long <- prep_battery_long(c("won_act", "won_hyp"))
+
+won_include_overall_df <- bind_rows(
+  battery_props_by_party(won_include_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE) %>%
+    mutate(metric = "Selected (top 3)", .before = 1),
+  battery_props_by_party(won_include_long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = FALSE) %>%
+    mutate(metric = "Ranked #1", .before = 1)
+)
+p <- plot_combo_bar_point(won_include_overall_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_won_include_selected_overall", width = 10, height = 4.5)
+
+won_include_selected_party_df <- battery_props_by_party(won_include_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
+p <- plot_battery_dodge_party(won_include_selected_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_won_include_selected_party", width = 10, height = 4.5)
+
+won_include_ranked_party_df <- battery_props_by_party(won_include_long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = TRUE)
+p <- plot_battery_dodge_party(won_include_ranked_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_won_include_ranked_party", width = 10, height = 4.5)
+
+message("  Include everyone: n = ", format(won_include_overall_df$n[won_include_overall_df$metric == "Selected (top 3)"][1], big.mark = ","))
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## I.3.3. Which sources: never-seekers only ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+won_never_long <- prep_battery_long("won_hyp")
+
+won_never_overall_df <- bind_rows(
+  battery_props_by_party(won_never_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE) %>%
+    mutate(metric = "Selected (top 3)", .before = 1),
+  battery_props_by_party(won_never_long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = FALSE) %>%
+    mutate(metric = "Ranked #1", .before = 1)
+)
+p <- plot_combo_bar_point(won_never_overall_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_won_never_selected_overall", width = 10, height = 4.5)
+
+won_never_selected_party_df <- battery_props_by_party(won_never_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
+p <- plot_battery_dodge_party(won_never_selected_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_won_never_selected_party", width = 10, height = 4.5)
+
+won_never_ranked_party_df <- battery_props_by_party(won_never_long %>% mutate(is_first = coalesce(rank == 1, FALSE)), "is_first", by_party = TRUE)
+p <- plot_battery_dodge_party(won_never_ranked_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_won_never_ranked_party", width = 10, height = 4.5)
+
+message("  Never-seekers only: n = ", format(won_never_overall_df$n[won_never_overall_df$metric == "Selected (top 3)"][1], big.mark = ","))
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## I.3.4. Drill-down: contact mode (local/state election officials) ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+won_mode_overall_df <- factor_props(data, "won_official_mode_pooled")
+p <- plot_categorical(won_mode_overall_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_won_mode_overall", width = 10, height = 4.5)
+
+won_mode_party_df <- factor_props_by(data, "won_official_mode_pooled", "pid3")
+won_mode_colors <- setNames(colorRampPalette(c("#b7d3f6", "#0d366b"))(length(levels(data$won_official_mode_pooled))),
+                            levels(data$won_official_mode_pooled))
+p <- plot_prop_stack_by(won_mode_party_df, by_col = "pid3", colors = won_mode_colors)
+p
+# save_chart(p, "part2_won_mode_party", width = 10, height = 4.5)
+
+message("  Contact mode: n = ", format(won_mode_overall_df$n[1], big.mark = ","))
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## I.3.5. Drill-down: social media platform ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+won_social_long <- prep_battery_long(c("won_act_social", "won_hyp_social"))
+
+won_social_overall_df <- battery_props_by_party(won_social_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE)
+p <- plot_battery_bar(won_social_overall_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_won_social_overall", width = 10, height = 4.5)
+
+won_social_party_df <- battery_props_by_party(won_social_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
+p <- plot_battery_dodge_party(won_social_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_won_social_party", width = 10, height = 4.5)
+
+message("  Social media platform: n = ", format(won_social_overall_df$n[1], big.mark = ","))
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## I.3.6. Drill-down: AI chatbot ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+won_bot_long <- prep_battery_long(c("won_act_bot", "won_hyp_bot"))
+
+won_bot_overall_df <- battery_props_by_party(won_bot_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = FALSE)
+p <- plot_battery_bar(won_bot_overall_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_won_bot_overall", width = 10, height = 4.5)
+
+won_bot_party_df <- battery_props_by_party(won_bot_long %>% mutate(is_selected = selected == "1"), "is_selected", by_party = TRUE)
+p <- plot_battery_dodge_party(won_bot_party_df, x_label = "Weighted %")
+p
+# save_chart(p, "part2_won_bot_party", width = 10, height = 4.5)
+
+message("  AI chatbot: n = ", format(won_bot_overall_df$n[1], big.mark = ","))
 
 
 
@@ -742,7 +1104,9 @@ bpc2_trend_df <- bind_rows(
   prop_table_by_item(cum, bpc2_cols) %>% mutate(item = bpc2_items[str_remove(item, "^src_")]),
   new_item_trend(c(src_friends_family = "Friends and/or family"))
 )
-save_chart(plot_dumbbell(bpc2_trend_df, "Weighted % selected (among top 3)"), "part3_bpc2_trend", height = 4.5)
+p <- plot_dumbbell(bpc2_trend_df, "Weighted % selected (among top 3)")
+p
+# save_chart(p, "part3_bpc2_trend", height = 4.5)
 message("Part J.1: bpc2_trend_df built.")
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -759,25 +1123,62 @@ trend_items <- c(local_officials = "Local/county officials", state_officials = "
                   social = "Social media influencer", friends_family = "Friends/family",
                   advocacy = "Election-integrity/advocacy orgs", campaign = "Candidate, campaign, or party")
 
-for (need in c("reg", "run", "won")) {
-  trend_df <- bind_rows(
-    prop_table_by_item(cum, paste0(need, "_src_", names(trend_items))) %>%
-      mutate(item = trend_items[str_remove(item, paste0("^", need, "_src_"))]),
-    new_item_trend(setNames(NEW_LABELS, paste0(need, "_src_", names(NEW_LABELS))))
-  )
-  assign(paste0(need, "_trend_df"), trend_df)
-  save_chart(plot_dumbbell(trend_df, "Weighted % selected (among top 3)"), paste0("part3_", need, "_trend"), height = 3.5)
+# Unrolled deliberately, matching Part I - three explicit blocks below, no loop, save_chart() calls
+# commented out, and each chart displayed (a bare `p`) as soon as it is built.
 
-  dropped_cols <- paste0(need, "_src_", names(DROPPED_LABELS))
-  dropped_df <- map_dfr(dropped_cols, function(col) svy_prop(cum %>% filter(year == 2024), col, "weight_common") %>%
-                           mutate(item = DROPPED_LABELS[[str_remove(col, paste0("^", need, "_src_"))]], .before = 1))
-  assign(paste0(need, "_dropped_df"), dropped_df)
-  save_chart(plot_battery_bar(dropped_df, x_label = "Weighted % selected, 2024 only"), paste0("part3_", need, "_dropped"), height = 2.5)
+# --- Registering and voting ---
+reg_trend_df <- bind_rows(
+  prop_table_by_item(cum, paste0("reg_src_", names(trend_items))) %>%
+    mutate(item = trend_items[str_remove(item, "^reg_src_")]),
+  new_item_trend(setNames(NEW_LABELS, paste0("reg_src_", names(NEW_LABELS))))
+)
+p <- plot_dumbbell(reg_trend_df, "Weighted % selected (among top 3)")
+p
+# save_chart(p, "part3_reg_trend", height = 3.5)
 
-  message("Part J.2: ", need, "_trend_df / ", need, "_dropped_df built.")
-}
+reg_dropped_df <- map_dfr(paste0("reg_src_", names(DROPPED_LABELS)), function(col) svy_prop(cum %>% filter(year == 2024), col, "weight_common") %>%
+                             mutate(item = DROPPED_LABELS[[str_remove(col, "^reg_src_")]], .before = 1))
+p <- plot_battery_bar(reg_dropped_df, x_label = "Weighted % selected, 2024 only")
+p
+# save_chart(p, "part3_reg_dropped", height = 2.5)
 
-rm(need, trend_df, dropped_cols, dropped_df)
+message("Part J.2: reg_trend_df / reg_dropped_df built.")
+
+# --- How elections are run ---
+run_trend_df <- bind_rows(
+  prop_table_by_item(cum, paste0("run_src_", names(trend_items))) %>%
+    mutate(item = trend_items[str_remove(item, "^run_src_")]),
+  new_item_trend(setNames(NEW_LABELS, paste0("run_src_", names(NEW_LABELS))))
+)
+p <- plot_dumbbell(run_trend_df, "Weighted % selected (among top 3)")
+p
+# save_chart(p, "part3_run_trend", height = 3.5)
+
+run_dropped_df <- map_dfr(paste0("run_src_", names(DROPPED_LABELS)), function(col) svy_prop(cum %>% filter(year == 2024), col, "weight_common") %>%
+                             mutate(item = DROPPED_LABELS[[str_remove(col, "^run_src_")]], .before = 1))
+p <- plot_battery_bar(run_dropped_df, x_label = "Weighted % selected, 2024 only")
+p
+# save_chart(p, "part3_run_dropped", height = 2.5)
+
+message("Part J.2: run_trend_df / run_dropped_df built.")
+
+# --- Who won ---
+won_trend_df <- bind_rows(
+  prop_table_by_item(cum, paste0("won_src_", names(trend_items))) %>%
+    mutate(item = trend_items[str_remove(item, "^won_src_")]),
+  new_item_trend(setNames(NEW_LABELS, paste0("won_src_", names(NEW_LABELS))))
+)
+p <- plot_dumbbell(won_trend_df, "Weighted % selected (among top 3)")
+p
+# save_chart(p, "part3_won_trend", height = 3.5)
+
+won_dropped_df <- map_dfr(paste0("won_src_", names(DROPPED_LABELS)), function(col) svy_prop(cum %>% filter(year == 2024), col, "weight_common") %>%
+                             mutate(item = DROPPED_LABELS[[str_remove(col, "^won_src_")]], .before = 1))
+p <- plot_battery_bar(won_dropped_df, x_label = "Weighted % selected, 2024 only")
+p
+# save_chart(p, "part3_won_dropped", height = 2.5)
+
+message("Part J.2: won_trend_df / won_dropped_df built.")
 
 
 
