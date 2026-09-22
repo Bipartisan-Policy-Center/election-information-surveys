@@ -82,7 +82,51 @@ backbone22 <- tibble(
   weight_native = data22.orig$wts
 )
 
-# --- Temporary checkpoint for Task 1 - replaced by Part F/G in Task 4 ---
-message("Task 1 checkpoint: n = ", nrow(backbone22),
-        ", sum(weight_native) = ", round(sum(backbone22$weight_native), 2),
-        ", n_distinct(resp_id) = ", n_distinct(backbone22$resp_id))
+
+##### #
+#### #
+### ################################################################################################################################################# #
+# Part C. Demographics ------------------------------------------------------------------------------------------------------------------------------- ----
+### ################################################################################################################################################# #
+#### #
+##### #
+
+# Every code->label mapping below was verified against 2022/raw/levels_codebook.csv and
+# 2022/survey_instrument.md this session - see eis_2026_11_cumulative_2022_2023_design.md for the full
+# audit. All of these use the identical Morning Consult coding scheme eis_2026_04_cumulative_data.R
+# already relied on for 2024, since 2022 and 2024 share a vendor and item bank.
+demog22 <- tibble(
+  educ3              = factor(data22.orig$xeduc3,        levels = 1:3, labels = lvl("educ3"),        ordered = TRUE),
+  race_white         = factor(as.integer(coalesce(data22.orig$xdemWhite, 0)), levels = c(0, 1)),
+  age4               = factor(data22.orig$age,           levels = 1:4, labels = lvl("age4"),         ordered = TRUE),
+  gender             = factor(data22.orig$xdemGender,    levels = 1:2, labels = lvl("gender")),
+  region4            = factor(data22.orig$xreg4,         levels = 1:4, labels = lvl("region4")),
+  generation         = factor(data22.orig$demAgeGeneration, levels = 1:4, labels = lvl("generation"), ordered = TRUE),
+  ideo3              = factor(data22.orig$xdemIdeo3,     levels = 1:3, labels = lvl("ideo3"),         ordered = TRUE),
+  income3            = factor(data22.orig$xdemInc3,      levels = 1:3, labels = lvl("income3"),       ordered = TRUE),
+  rural_urban3       = factor(data22.orig$xdemUsr,       levels = 1:3, labels = lvl("rural_urban3"),  ordered = TRUE),
+  employment         = factor(data22.orig$xdemEmploy,    levels = 1:8, labels = lvl("employment")),
+  evangelical        = factor(data22.orig$xdemEvang,     levels = 1:2, labels = lvl("evangelical")),
+  pid3               = factor(data22.orig$xpid3,         levels = 1:3, labels = lvl("pid3")),
+  recalled_vote      = factor(data22.orig$xsubVote20O,   levels = 1:4, labels = c("Dem", "Rep", "Other", "Did not vote")),
+  religion           = factor(data22.orig$xdemReligion,  levels = 1:5,
+                               labels = c("All Christian", "All Non-Christian", "Atheist",
+                                          "Agnostic/Nothing in particular", "Something Else"))
+)
+
+# race4: 2022 delivers the same four overlapping single-value flags 2024 does (Hispanic origin asked
+# separately from race), so a Hispanic respondent also carries a race flag. Giving Hispanic origin
+# precedence, identical to eis_2026_04_cumulative_data.R Part C.3, is the only ordering that partitions
+# the sample.
+race4_22 <- case_when(coalesce(data22.orig$xdemHispBin, 0) == 1 ~ "Hispanic",
+                      coalesce(data22.orig$xdemWhite,   0) == 1 ~ "White, non-Hispanic",
+                      coalesce(data22.orig$demBlackBin, 0) == 1 ~ "Black, non-Hispanic",
+                      coalesce(data22.orig$demRaceOther,0) == 1 ~ "Other, non-Hispanic",
+                      TRUE                                      ~ NA_character_)
+demog22$race4 <- factor(race4_22, levels = lvl("race4"))
+
+# --- Temporary checkpoint for Task 2 - replaced by Part F/G in Task 4 ---
+message("Task 2 checkpoint: religion NAs = ", sum(is.na(demog22$religion)),
+        ", race4 NAs = ", sum(is.na(demog22$race4)),
+        ", religion levels match existing = ", identical(levels(demog22$religion), lvl("religion")),
+        ", race4 levels match existing = ", identical(levels(demog22$race4), lvl("race4")))
