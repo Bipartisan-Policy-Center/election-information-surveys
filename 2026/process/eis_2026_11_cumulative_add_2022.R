@@ -183,10 +183,26 @@ na_like <- function(x, n) x[rep(NA_integer_, n)]
 
 data22.built <- bind_cols(backbone22, demog22, conf22)
 
+# Explicit expected column set for 2022 - not just "whatever backbone22/demog22/conf22 happen to
+# contain right now". Checking data22.built's columns against this hardcoded list, rather than only
+# ever deriving "what's missing" FROM data22.built, means a future edit that silently adds, drops, or
+# renames a column in Part C/D without updating this list is caught immediately here - a self-referential
+# check (comparing data22.built only to itself) could never catch that, since whatever the tibble
+# happens to contain would always match itself.
+populated.cols.expected <- c(
+  "year", "resp_id", "weight_native",
+  "educ3", "race_white", "age4", "gender", "region4", "generation", "ideo3", "income3",
+  "rural_urban3", "employment", "evangelical", "pid3", "recalled_vote", "religion", "race4",
+  "conf_own_vote", "conf_local_votes", "conf_state_votes", "conf_national_votes"
+)
+stopifnot("2022 populates exactly the demographic/confidence columns Jack scoped, no more, no fewer" =
+            setequal(names(data22.built), populated.cols.expected))
+
+# Vectorized column-wise fill (a data.frame subset's columns, run through lapply, assigned back by
+# name) rather than a for loop - same result, standard tidyverse idiom for "transform every column in
+# this set the same way."
 missing.cols <- setdiff(names(cumulative.existing), names(data22.built))
-for (col in missing.cols) {
-  data22.built[[col]] <- na_like(cumulative.existing[[col]], nrow(data22.built))
-}
+data22.built[missing.cols] <- lapply(cumulative.existing[missing.cols], na_like, n = nrow(data22.built))
 
 # Column ORDER also has to match exactly - bind_rows() matches by name regardless of order, but the
 # stopifnot below checks names() with order-sensitive identical(), matching eis_2026_04_cumulative_data.R
@@ -220,24 +236,31 @@ cumulative <- bind_rows(cumulative.existing, data22.built)
 #### #
 ##### #
 
+# Computed once and reused below, rather than re-filtering cumulative to year == 2022 in every
+# individual check - eis_2026_04_cumulative_data.R's own Part G avoids the equivalent repetition with a
+# single group_by(year) %>% summarise() pass for its weight checks, for the same reason.
+cum22 <- cumulative %>% filter(year == 2022)
+
 stopifnot(
   "7,037 rows total (5,035 existing + 2,002 from 2022)" = nrow(cumulative) == 7037,
-  "2,002 rows are 2022" = sum(cumulative$year == 2022) == 2002,
+  "2,002 rows are 2022" = nrow(cum22) == 2002,
   "resp_id is unique within year" = cumulative %>% count(year, resp_id) %>% pull(n) %>% max() == 1,
-  "2022's weight_native sums to its own n" = cumulative %>% filter(year == 2022) %>%
-    pull(weight_native) %>% sum() %>% {abs(. - 2002) < 1},
+  "2022's weight_native sums to its own n" = abs(sum(cum22$weight_native) - 2002) < 1,
   "2022's weight_common is entirely missing (no common weight exists for 2022 yet)" =
-    cumulative %>% filter(year == 2022) %>% pull(weight_common) %>% is.na() %>% all(),
-  "2022's demographics are never entirely missing" =
-    cumulative %>% filter(year == 2022) %>% select(educ3, race4, age4, gender, region4, pid3) %>%
+    all(is.na(cum22$weight_common)),
+  # Covers all 15 demographic + all 4 confidence columns (every column Part C/D actually build), not a
+  # representative handful - a bug confined to one under-checked column (e.g. a mistyped source column
+  # for `religion` or `recalled_vote`) would otherwise pass silently.
+  "none of 2022's populated demographic/confidence columns are entirely missing" =
+    cum22 %>% select(all_of(setdiff(populated.cols.expected, c("year", "resp_id", "weight_native")))) %>%
       summarise(across(everything(), ~ !all(is.na(.x)))) %>% unlist() %>% all(),
-  "2022's prospective confidence items are never entirely missing" =
-    cumulative %>% filter(year == 2022) %>%
-      select(conf_own_vote, conf_local_votes, conf_state_votes, conf_national_votes) %>%
-      summarise(across(everything(), ~ !all(is.na(.x)))) %>% unlist() %>% all(),
-  "2022's country_direction/top_issue and source-seeking/AI/concern/seek items are entirely missing (out of scope for this pass)" =
-    cumulative %>% filter(year == 2022) %>%
-      select(country_direction, top_issue, matches("^(reg|run|won)_src_|^src_|^ai_ok_|^concern_|^seek_|^vote_exp_positive")) %>%
+  # Named explicitly (not just implied by the populated.cols.expected check above) because this is a
+  # real, user-visible change in the file's own guarantees: eis_2026_04_cumulative_data.R's Part G
+  # asserts "state is never missing" for the 2024/2026 file - true there because both years deliver a
+  # ZIP code (2026 directly, 2024 via crosswalk). 2022 delivers no ZIP or other geography at all, so
+  # this is the one place the existing file's own invariant is intentionally no longer true file-wide.
+  "2022 has no ZIP-derived geography, so state/county/town are entirely missing (expected, documented)" =
+    cum22 %>% select(state, county, town) %>%
       summarise(across(everything(), ~ all(is.na(.x)))) %>% unlist() %>% all()
 )
 
