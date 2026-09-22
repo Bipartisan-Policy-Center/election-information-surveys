@@ -61,7 +61,7 @@ this project already caveats the source-seeking menu-composition problem in the 
 | `year` | 2022L | 2023L |
 | `resp_id` | **No respondent ID column exists in `2022/raw/data.csv` at all** (confirmed against the full 138-column header — no `ResponseID` or equivalent). Would need a synthetic id (e.g. `paste0("2022_", row_number())`); every 2022 row is still unique, just not vendor-identified | `ResponseID` present, use directly like 2024/2026 |
 | `weight_native` | `wts` (same column name as 2024) | `wts` |
-| `weight_common` | Not addressed here — see "Out of scope" below | Not addressed here |
+| `weight_common` | Built 2026-09-22 — see "Out of scope" below | Not addressed here |
 
 **2022 sample composition decision needed:** `2022/raw/data.csv` has 4,113 rows, not the 2,002 the
 README describes as the national sample. `AUD` (1 = GENPOP n=2,002, 2 = Colorado oversample n=805, 3 =
@@ -217,11 +217,15 @@ most often overall") and not recommended as a real substitute.
 
 ## Out of scope for this document
 
-- **`weight_common`.** The existing composition-free re-raked weight (`eis_2026_03_common_weights.R`)
-  was built to reconcile 2024 and 2026's demographic composition specifically. Extending it to a 4-way
-  common weight needs its own raking-target design (and 2022 lacks ZIP-derived geography entirely, which
-  script 03 may or may not depend on) — a separate methodological task, not a variable-identification
-  question.
+- **`weight_common` for 2022 — done, 2026-09-22, not by this document.** `eis_2026_03_common_weights.R`
+  was extended to re-rake 2022 to the same common demographic target as 2024/2026 (it needed none of
+  2022's missing ZIP-derived geography — the raking margins are education/race/age/gender/region/recalled
+  vote, none of them geography). 2022's own delivered weight turned out to already be close to the
+  target (the confidence items moved only ~0.2-0.3pts under the re-rake, far less than 2024's own
+  correction), but it is now on the identical composition as the other two years rather than merely
+  close. `eis_2026_11_cumulative_add_2022.R` populates `weight_common` from this directly. 2023's
+  4-way extension (if ever done) remains a separate task — 2023's registered-voter problem (see
+  [[eis-2023-survey-population-caveat]]) is unresolved and unrelated to this fix.
 - Everything in 2022/2023 with no `eis_cumulative` counterpart to compare against — 2022's `BPC6a`-`f`
   (trust-messenger paired comparisons), `BPC7`/`xBPC7dem`/`xBPC7rep`/`xBPC7state` (statement-trust by
   messenger), `BPC8` (who should decide on contested ballots), `BPCdem1`/`BPCdem2` (MAGA/progressive
