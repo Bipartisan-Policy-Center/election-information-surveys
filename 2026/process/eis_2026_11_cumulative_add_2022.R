@@ -21,9 +21,9 @@
 ####  File Description: 2022 contributes only its national sample (AUD == 1, n = 2,002) - the raw file
 ####            also bundles three non-national state oversamples (Colorado/Georgia/Wisconsin) which
 ####            would bias national trend estimates and are dropped. 2022 has no respondent-ID column, so
-####            resp_id is synthesized from row position. 2022 has no weight_common (the composition-free
-####            re-raked weight from script 03 covers only 2024/2026 - see the design doc's "out of
-####            scope" section); weighted comparisons involving 2022 should use weight_native.
+####            resp_id is synthesized from row position. weight_common now comes from
+####            eis_2026_03_common_weights.R, which was extended to re-rake 2022 to the same common
+####            demographic target as 2024/2026 (run 03 before this script, same as always).
 ####
 ####  Output: output/eis_cumulative.rds and output/eis_cumulative.csv (now 2022+2024+2026)
 ####
@@ -53,6 +53,10 @@ cumulative.existing <- readRDS(file.path(out.dir, "eis_cumulative.rds"))
 # 2024) - read raw and build only the columns needed here.
 data22.orig <- read.csv("input/eis_2022_data.csv")
 
+# Both years' delivered weights plus the common (composition-free) re-raked weights built by script 03 -
+# same input eis_2026_04_cumulative_data.R itself reads for 2024/2026's weight_common.
+common.weights <- readRDS(file.path(out.dir, "eis_common_weights.rds"))
+
 
 ##### #
 #### #
@@ -76,10 +80,16 @@ lvl <- function(var) levels(cumulative.existing[[var]])
 # 2022 has no respondent-ID column at all (confirmed against the full raw header) - every row is still
 # unique, just not vendor-identified, so a synthetic id from row position is used instead of a
 # row-position "fallback" (there is nothing to fall back FROM, unlike 2024/2026's ResponseID/resp_id).
+#
+# weight_common assigned positionally, not joined - eis_2026_03_common_weights.R's own w2022 is computed
+# from the identical read.csv("input/eis_2022_data.csv") %>% filter(AUD == 1) sequence used here, so the
+# two are guaranteed to be in the same row order (matching how that script already treats w2024, and
+# documented there for the same reason).
 backbone22 <- tibble(
   year          = 2022L,
   resp_id       = paste0("2022_", seq_len(nrow(data22.orig))),
-  weight_native = data22.orig$wts
+  weight_native = data22.orig$wts,
+  weight_common = common.weights$w2022
 )
 
 
@@ -190,7 +200,7 @@ data22.built <- bind_cols(backbone22, demog22, conf22)
 # check (comparing data22.built only to itself) could never catch that, since whatever the tibble
 # happens to contain would always match itself.
 populated.cols.expected <- c(
-  "year", "resp_id", "weight_native",
+  "year", "resp_id", "weight_native", "weight_common",
   "educ3", "race_white", "age4", "gender", "region4", "generation", "ideo3", "income3",
   "rural_urban3", "employment", "evangelical", "pid3", "recalled_vote", "religion", "race4",
   "conf_own_vote", "conf_local_votes", "conf_state_votes", "conf_national_votes"
@@ -246,13 +256,15 @@ stopifnot(
   "2,002 rows are 2022" = nrow(cum22) == 2002,
   "resp_id is unique within year" = cumulative %>% count(year, resp_id) %>% pull(n) %>% max() == 1,
   "2022's weight_native sums to its own n" = abs(sum(cum22$weight_native) - 2002) < 1,
-  "2022's weight_common is entirely missing (no common weight exists for 2022 yet)" =
-    all(is.na(cum22$weight_common)),
+  # weight_common now comes from eis_2026_03_common_weights.R's own w2022 (re-raked to the same common
+  # demographic target as 2024/2026) - same sum-to-n check as weight_native, matching
+  # eis_2026_04_cumulative_data.R Part G's identical check for 2024/2026's own weight_common.
+  "2022's weight_common sums to its own n" = abs(sum(cum22$weight_common) - 2002) < 1,
   # Covers all 15 demographic + all 4 confidence columns (every column Part C/D actually build), not a
   # representative handful - a bug confined to one under-checked column (e.g. a mistyped source column
   # for `religion` or `recalled_vote`) would otherwise pass silently.
   "none of 2022's populated demographic/confidence columns are entirely missing" =
-    cum22 %>% select(all_of(setdiff(populated.cols.expected, c("year", "resp_id", "weight_native")))) %>%
+    cum22 %>% select(all_of(setdiff(populated.cols.expected, c("year", "resp_id", "weight_native", "weight_common")))) %>%
       summarise(across(everything(), ~ !all(is.na(.x)))) %>% unlist() %>% all(),
   # Named explicitly (not just implied by the populated.cols.expected check above) because this is a
   # real, user-visible change in the file's own guarantees: eis_2026_04_cumulative_data.R's Part G
