@@ -157,6 +157,107 @@ conf22 <- tibble(
   conf_national_votes = factor(recode_conf4(data22.orig$BPC16), levels = lvl("conf_national_votes"), ordered = TRUE)
 )
 
-# --- Temporary checkpoint for Task 3 - replaced by Part F/G in Task 4 ---
-message("Task 3 checkpoint: ", paste(names(conf22), sapply(conf22, function(x) sum(is.na(x))), sep = "=NA:", collapse = ", "))
-message("conf_own_vote table: ", paste(names(table(conf22$conf_own_vote)), table(conf22$conf_own_vote), sep = "=", collapse = ", "))
+
+##### #
+#### #
+### ################################################################################################################################################# #
+# Part E. Filling every other column, then stacking --------------------------------------------------------------------------------------------------- ----
+### ################################################################################################################################################# #
+#### #
+##### #
+
+# 2022 does not populate country_direction/top_issue (out of the scope Jack asked for - demographics and
+# confidence only, even though both are available - see the design doc), state/county/town (no ZIP
+# delivered), union_member/sexual_orientation/insured/insurance_type/married (not delivered, same gap
+# 2024/2026 already have), weight_common (the composition-free re-raked weight from script 03 covers
+# only 2024/2026 - see the design doc's "out of scope" section), and every source-seeking/AI/concern/
+# vote-experience substantive item (2022 either lacks them entirely or lacks a clean match - see the
+# design doc).
+#
+# na_like() fills each of those columns with the correctly-typed NA - same class, same factor levels and
+# level ORDER as the existing file - by indexing the reference column with an out-of-range index rather
+# than hand-declaring ~90 columns' levels a second time. Same idea as eis_2026_04_cumulative_data.R's own
+# na_binary(), generalized from one hardcoded 2-level factor to any column type, because this script
+# needs it for far more columns than that one did.
+na_like <- function(x, n) x[rep(NA_integer_, n)]
+
+data22.built <- bind_cols(backbone22, demog22, conf22)
+
+missing.cols <- setdiff(names(cumulative.existing), names(data22.built))
+for (col in missing.cols) {
+  data22.built[[col]] <- na_like(cumulative.existing[[col]], nrow(data22.built))
+}
+
+# Column ORDER also has to match exactly - bind_rows() matches by name regardless of order, but the
+# stopifnot below checks names() with order-sensitive identical(), matching eis_2026_04_cumulative_data.R
+# Part F's own check, so the columns are put in the existing file's order here rather than relying on
+# bind_rows() to reconcile it silently.
+data22.built <- data22.built %>% select(all_of(names(cumulative.existing)))
+
+# Checking level identity BEFORE stacking, not after - bind_rows() does not require two factor columns to
+# share levels, it silently unions them - so a mismatch here would not throw an error later, it would
+# just produce a column with more levels than either side actually has and no error to catch it.
+# Identical check to eis_2026_04_cumulative_data.R Part F, extended to compare 2022 against the existing
+# (already-validated) 2024/2026 file instead of comparing 2024 against 2026.
+factor.cols <- names(data22.built)[sapply(data22.built, is.factor)]
+level.check.cols <- setdiff(factor.cols, c("state", "county", "town"))
+level.mismatches <- level.check.cols[!sapply(level.check.cols, function(v)
+  identical(levels(data22.built[[v]]), levels(cumulative.existing[[v]])))]
+
+stopifnot("2022 and the existing cumulative file have the same column names, in the same order" =
+            identical(names(data22.built), names(cumulative.existing)),
+          "every factor column in 2022, other than state/county/town, has identical levels, in the same order, to the existing file" =
+            length(level.mismatches) == 0)
+
+cumulative <- bind_rows(cumulative.existing, data22.built)
+
+
+##### #
+#### #
+### ################################################################################################################################################# #
+# Part F. Validation --------------------------------------------------------------------------------------------------------------------------------- ----
+### ################################################################################################################################################# #
+#### #
+##### #
+
+stopifnot(
+  "7,037 rows total (5,035 existing + 2,002 from 2022)" = nrow(cumulative) == 7037,
+  "2,002 rows are 2022" = sum(cumulative$year == 2022) == 2002,
+  "resp_id is unique within year" = cumulative %>% count(year, resp_id) %>% pull(n) %>% max() == 1,
+  "2022's weight_native sums to its own n" = cumulative %>% filter(year == 2022) %>%
+    pull(weight_native) %>% sum() %>% {abs(. - 2002) < 1},
+  "2022's weight_common is entirely missing (no common weight exists for 2022 yet)" =
+    cumulative %>% filter(year == 2022) %>% pull(weight_common) %>% is.na() %>% all(),
+  "2022's demographics are never entirely missing" =
+    cumulative %>% filter(year == 2022) %>% select(educ3, race4, age4, gender, region4, pid3) %>%
+      summarise(across(everything(), ~ !all(is.na(.x)))) %>% unlist() %>% all(),
+  "2022's prospective confidence items are never entirely missing" =
+    cumulative %>% filter(year == 2022) %>%
+      select(conf_own_vote, conf_local_votes, conf_state_votes, conf_national_votes) %>%
+      summarise(across(everything(), ~ !all(is.na(.x)))) %>% unlist() %>% all(),
+  "2022's country_direction/top_issue and source-seeking/AI/concern/seek items are entirely missing (out of scope for this pass)" =
+    cumulative %>% filter(year == 2022) %>%
+      select(country_direction, top_issue, matches("^(reg|run|won)_src_|^src_|^ai_ok_|^concern_|^seek_|^vote_exp_positive")) %>%
+      summarise(across(everything(), ~ all(is.na(.x)))) %>% unlist() %>% all()
+)
+
+message("eis_2026_11_cumulative_add_2022.R: all validation checks passed. n = ", nrow(cumulative),
+        " (", sum(cumulative$year == 2022), " from 2022, ", sum(cumulative$year == 2024), " from 2024, ",
+        sum(cumulative$year == 2026), " from 2026), ", ncol(cumulative), " columns.")
+
+
+##### #
+#### #
+### ################################################################################################################################################# #
+# Part G. Saving -------------------------------------------------------------------------------------------------------------------------------------- ----
+### ################################################################################################################################################# #
+#### #
+##### #
+
+saveRDS(object = cumulative, file = file.path(out.dir, "eis_cumulative.rds"))
+write.csv(x = cumulative, file = file.path(out.dir, "eis_cumulative.csv"), row.names = FALSE, na = "")
+
+message("\nCumulative file written to ", out.dir, "/eis_cumulative.rds and .csv (", nrow(cumulative),
+        " rows, ", ncol(cumulative), " columns).")
+
+# The end.
