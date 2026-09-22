@@ -416,9 +416,14 @@ cat("\nNote the side benefit: the common target IMPROVES 2024's design effect, w
 ## D.1. The comparison helper ----
 # - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-# This is the one function this script defines, because it is the thing the script exists to hand over: a year-over-year
-# comparison has to be computed the same way every time it is run, on whatever item is being compared, and the
-# arithmetic is not something any existing function does.
+# The weighted percentage in the numerator, over the respondents who were in base at all. File-scope
+# (not local to compare_years() below) because D.3 needs the identical arithmetic for 2022 alone,
+# which has no second year to pair against in a compare_years() call.
+pct <- function(indicator, weight) 100 * sum(weight[indicator], na.rm = TRUE) / sum(weight[!is.na(indicator)])
+
+# The other function this script defines: a year-over-year comparison has to be computed the same way
+# every time it is run, on whatever item is being compared, and the arithmetic is not something any
+# existing function does.
 #
 # `indicator24` and `indicator26` are LOGICAL vectors over their year's respondents:
 #   TRUE   the respondent is in the numerator
@@ -430,9 +435,6 @@ cat("\nNote the side benefit: the common target IMPROVES 2024's design effect, w
 # Returns the naive difference (delivered weights), the composition-free difference (common weights), and the gap
 # between them — which is the part of the naive difference that was the target change rather than opinion change.
 compare_years <- function(label, indicator24, indicator26) {
-
-  # The weighted percentage in the numerator, over the respondents who were in base at all
-  pct <- function(indicator, weight) 100 * sum(weight[indicator], na.rm = TRUE) / sum(weight[!is.na(indicator)])
 
   naive  <- pct(indicator26, data26$weight) - pct(indicator24, data24$wts)
   common <- pct(indicator26, weight26)      - pct(indicator24, weight24)
@@ -487,13 +489,12 @@ print(comparison %>% mutate(across(where(is.numeric), ~ round(.x, 1))) %>% as.da
 # it against in a two-year diff. Just 2022 on its own, delivered weight vs. common weight, on the same two confidence
 # items (2022's BPC15 state / BPC16 nationwide), to show directly how much this year's own re-rake actually moves it
 # - answering the question this script's header raises: since 2022's own delivered weight was already fairly close
-# to the common target (unlike 2024's), how much does re-raking it actually change.
-pct22 <- function(indicator, weight) 100 * sum(weight[indicator], na.rm = TRUE) / sum(weight[!is.na(indicator)])
-
+# to the common target (unlike 2024's), how much does re-raking it actually change. Reuses D.1's
+# file-scope pct(), the same arithmetic compare_years() uses internally.
 comparison22 <- tibble(
   item      = c("Confident votes counted: state", "Confident votes counted: nationwide"),
-  delivered = c(pct22(data22$BPC15 %in% 1:2, data22$wts), pct22(data22$BPC16 %in% 1:2, data22$wts)),
-  common    = c(pct22(data22$BPC15 %in% 1:2, weight22),   pct22(data22$BPC16 %in% 1:2, weight22))
+  delivered = c(pct(data22$BPC15 %in% 1:2, data22$wts), pct(data22$BPC16 %in% 1:2, data22$wts)),
+  common    = c(pct(data22$BPC15 %in% 1:2, weight22),   pct(data22$BPC16 %in% 1:2, weight22))
 ) %>% mutate(moved_pts = common - delivered)
 
 cat("\n\n2022 ALONE: DELIVERED WEIGHT VS. COMMON WEIGHT (percentage points)\n\n")
