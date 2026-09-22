@@ -125,8 +125,38 @@ race4_22 <- case_when(coalesce(data22.orig$xdemHispBin, 0) == 1 ~ "Hispanic",
                       TRUE                                      ~ NA_character_)
 demog22$race4 <- factor(race4_22, levels = lvl("race4"))
 
-# --- Temporary checkpoint for Task 2 - replaced by Part F/G in Task 4 ---
-message("Task 2 checkpoint: religion NAs = ", sum(is.na(demog22$religion)),
-        ", race4 NAs = ", sum(is.na(demog22$race4)),
-        ", religion levels match existing = ", identical(levels(demog22$religion), lvl("religion")),
-        ", race4 levels match existing = ", identical(levels(demog22$race4), lvl("race4")))
+
+##### #
+#### #
+### ################################################################################################################################################# #
+# Part D. Confidence votes will be counted as intended - PROSPECTIVE items only ------------------------------------------------------------------------ ----
+### ################################################################################################################################################# #
+#### #
+##### #
+
+# 2022 asks this both retrospectively (BPC9-12: "were... counted accurately in the 2020 election") and
+# prospectively (BPC13-16: "will be... counted accurately in the 2022 midterm election"). Only the
+# prospective items match conf_own_vote/etc.'s construct (a forward-looking expectation) - the
+# retrospective items ask about a past fact instead and are deliberately excluded, per Jack's explicit
+# instruction and eis_2026_11_cumulative_2022_2023_design.md's callout not to confuse the two.
+#
+# Recoding to label text first, then applying the existing file's level order via `levels = lvl(...)`,
+# the same safer pattern eis_2026_04_cumulative_data.R Part E.5 uses rather than a positional remap -
+# even though this four-item scale happens to be a clean end-to-end reversal of the raw codes, spelling
+# it out avoids relying on that happening to be true.
+recode_conf4 <- function(x) case_when(x == 1 ~ "Very confident",
+                                      x == 2 ~ "Somewhat confident",
+                                      x == 3 ~ "Not too confident",
+                                      x == 4 ~ "Not confident at all",
+                                      TRUE   ~ NA_character_)   # code 5 (Don't know) and anything else -> NA
+
+conf22 <- tibble(
+  conf_own_vote       = factor(recode_conf4(data22.orig$BPC13), levels = lvl("conf_own_vote"),       ordered = TRUE),
+  conf_local_votes    = factor(recode_conf4(data22.orig$BPC14), levels = lvl("conf_local_votes"),    ordered = TRUE),
+  conf_state_votes    = factor(recode_conf4(data22.orig$BPC15), levels = lvl("conf_state_votes"),    ordered = TRUE),
+  conf_national_votes = factor(recode_conf4(data22.orig$BPC16), levels = lvl("conf_national_votes"), ordered = TRUE)
+)
+
+# --- Temporary checkpoint for Task 3 - replaced by Part F/G in Task 4 ---
+message("Task 3 checkpoint: ", paste(names(conf22), sapply(conf22, function(x) sum(is.na(x))), sep = "=NA:", collapse = ", "))
+message("conf_own_vote table: ", paste(names(table(conf22$conf_own_vote)), table(conf22$conf_own_vote), sep = "=", collapse = ", "))
