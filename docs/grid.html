@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Confidence votes will be counted as intended, by party ID</title>
+<style>
+  /* The same Inter Tight the BPC Datawrapper theme uses, self-hosted by the theme */
+  @font-face {
+    font-family: "Inter Tight BPC";
+    font-weight: 400; font-style: normal; font-display: swap;
+    src: url("https://static.dwcdn.net/custom/themes/bipartisan-policy-center/InterTight-Regular.woff2") format("woff2"),
+         url("https://static.dwcdn.net/custom/themes/bipartisan-policy-center/InterTight-Regular.woff") format("woff");
+  }
+  @font-face {
+    font-family: "Inter Tight BPC";
+    font-weight: 700; font-style: normal; font-display: swap;
+    src: url("https://static.dwcdn.net/custom/themes/bipartisan-policy-center/InterTight-Bold.woff2") format("woff2"),
+         url("https://static.dwcdn.net/custom/themes/bipartisan-policy-center/InterTight-Bold.woff") format("woff");
+  }
+
+  /* This document IS the embed, so its viewport width equals the column width
+     on the host page. Plain media queries are therefore correct here -- no
+     container queries or !important needed, and no host theme to fight. */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: transparent; }
+
+  .title {
+    font-family: "Inter Tight BPC", "Inter Tight", sans-serif;
+    font-weight: 700; font-size: 22px; line-height: 1.25;
+    color: #000; margin: 0 0 .25em; max-width: 46ch;
+  }
+  .deck {
+    font-family: "Source Serif 4", "Source Serif", Georgia, serif;
+    font-size: 15px; line-height: 1.4; color: #181818; margin: 0 0 .6em;
+  }
+  .deck b { font-family: "Inter Tight BPC", "Inter Tight", sans-serif; font-weight: 700; }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 1.25em; margin: 0 0 1.25em;
+    font-family: "Inter Tight BPC", "Inter Tight", sans-serif;
+    font-weight: 400; font-size: 14px; color: #181818;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: .4em; }
+  .legend i { width: 18px; height: 3px; border-radius: 2px; background: currentColor; flex: none; }
+
+  .panels { display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .panels > iframe { width: 0; min-width: 100% !important; border: none; display: block; }
+
+  .note {
+    font-family: "Source Serif 4", "Source Serif", Georgia, serif;
+    font-size: 13px; line-height: 1.4; color: #666; margin: 1em 0 0;
+  }
+  .note a { color: inherit; text-decoration: underline; }
+
+  /* 4 across needs 4x190px panels + 3x16px gaps = 808px. Below that go
+     straight to 2x2 -- never 3 with an orphan. 190px keeps the longest
+     panel label ("votes in your community") on one line; it wraps near 180px. */
+  @media (max-width: 807.98px) { .panels { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 395.98px) { .panels { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body>
+  <p class="title">Democrats and Republicans are now equally confident that votes will be counted as intended.</p>
+  <p class="deck">Are you confident that <b>&#95;&#95;&#95;&#95;</b> will be counted as intended?</p>
+
+  <p class="legend" aria-label="Legend">
+    <span style="color:#2a78d6"><i></i><span style="color:#181818">Democratic</span></span>
+    <span style="color:#d03b3b"><i></i><span style="color:#181818">Republican</span></span>
+  </p>
+
+  <div class="panels">
+    <iframe title="Your own vote" aria-label="Line chart" id="datawrapper-chart-7ZMDn" src="https://datawrapper.dwcdn.net/7ZMDn/" scrolling="no" frameborder="0" height="220" data-external="1"></iframe>
+    <iframe title="Votes in your community" aria-label="Line chart" id="datawrapper-chart-7I5I7" src="https://datawrapper.dwcdn.net/7I5I7/" scrolling="no" frameborder="0" height="220" data-external="1"></iframe>
+    <iframe title="Votes in your state" aria-label="Line chart" id="datawrapper-chart-ea5ef" src="https://datawrapper.dwcdn.net/ea5ef/" scrolling="no" frameborder="0" height="220" data-external="1"></iframe>
+    <iframe title="Votes nationwide" aria-label="Line chart" id="datawrapper-chart-wUOKP" src="https://datawrapper.dwcdn.net/wUOKP/" scrolling="no" frameborder="0" height="220" data-external="1"></iframe>
+  </div>
+
+  <p class="note">Source: <a href="https://github.com/Bipartisan-Policy-Center/election-information-surveys" target="_blank" rel="noopener">BPC 2022/2024/2026 Election Information Surveys</a>. &ldquo;Confident&rdquo; combines somewhat and very confident. Independents excluded.</p>
+
+<!-- 1. Datawrapper's own resize script, sizing the four charts inside THIS page. -->
+<script type="text/javascript">(function(){function e(){window.addEventListener(`message`,function(e){if(e.data[`datawrapper-height`]!==void 0){var t=document.querySelectorAll(`iframe`);for(var n in e.data[`datawrapper-height`])for(var r=0,i;i=t[r];r++)if(i.contentWindow===e.source){var a=e.data[`datawrapper-height`][n]+`px`;i.style.height=a}}})}e()})();</script>
+
+<!-- 2. Report OUR height up to the host page, in Datawrapper's own message
+     format, so the Datawrapper resize script already on that page treats this
+     iframe like any chart and sizes it for us. No host-side code needed. -->
+<script type="text/javascript">
+(function () {
+  var last = 0;
+  function report() {
+    var h = Math.ceil(document.documentElement.getBoundingClientRect().height);
+    if (Math.abs(h - last) < 2) return;   // guard against resize feedback loops
+    last = h;
+    parent.postMessage({ "datawrapper-height": { "bpc-grid": h } }, "*");
+  }
+  if (window.ResizeObserver) new ResizeObserver(report).observe(document.documentElement);
+  window.addEventListener("load", report);
+  setTimeout(report, 500);
+  setTimeout(report, 2000);
+})();
+</script>
+</body>
+</html>
