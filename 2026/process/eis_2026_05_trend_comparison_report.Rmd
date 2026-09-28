@@ -1,0 +1,363 @@
+---
+title: "EIS 2024 vs. 2026"
+subtitle: "A Weighted Trend Comparison"
+date: "`r paste0('Last updated ', format(Sys.time(), '%B '), as.integer(format(Sys.time(), '%d')), format(Sys.time(), ', %Y at '), sub('^0', '', format(Sys.time(), '%I:%M %p')))`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    theme: readable
+    includes:
+      in_header: report_header.html
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, dpi = 96)
+knitr::opts_knit$set(upload.fun = knitr::image_uri)   # embed plots (self-contained, no pandoc)
+suppressMessages({library(tidyverse); library(survey); library(knitr)})
+theme_set(theme_minimal(base_size = 12))
+
+# Categorical color: which year a dot/bar belongs to. This is the validated-default
+# blue/orange pair from the dataviz skill's reference palette (documented CVD- and
+# contrast-safe as an adjacent pair) rather than the existing report's BPC_BLUE
+# (#1f3b63), because that exact pair hasn't been run through the palette validator
+# in this environment (no node available) and color here is accessibility-bearing.
+YEAR_COLORS <- c("2024" = "#2a78d6", "2026" = "#eb6834")
+
+# Status color: "good thing / bad thing" is a real polarity, not an arbitrary
+# category, so it takes the reserved status palette (good/critical) rather than
+# the year-identity colors above or the generic diverging blue/red pair - this also
+# keeps it visually distinct from the year dots used two sections down on the page.
+AI_STATUS_COLORS <- c("Bad" = "#d03b3b", "Neither" = "#898781", "Good" = "#0ca30c")
+
+# Ordinal color: a single hue, light-to-dark, for the seek-frequency categories -
+# these have a "more/less" order but no good/bad pole, so they don't take the
+# diverging or status treatment above.
+SEEK_RAMP <- c("#b7d3f6", "#6da7ec", "#2a78d6", "#1c5cab", "#0d366b")
+
+cum <- readRDS("output/eis_cumulative.rds") %>%
+  mutate(year = factor(year, levels = c(2024, 2026)))
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## Statistical helpers ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Three small helpers, all built on the `survey` package already used elsewhere in
+# this project (script 03), rather than hand-rolled SE formulas - matching this
+# project's existing rule of using a well-known function over a custom one.
+
+# A weighted proportion + 95% CI for a single 0/1 numeric indicator, one row per
+# year. Uses svyciprop() (logit-transformed) rather than svymean()+confint(), which
+# stays inside [0, 100] even for proportions near either end - svymean's plain
+# normal-theory interval can overshoot the bound.
+prop_by_year <- function(data, indicator_col, weight_col = "weight_common") {
+  map_dfr(levels(data$year), function(yr) {
+    sub <- data %>% filter(year == yr, !is.na(.data[[indicator_col]]))
+    des <- svydesign(ids = ~1, weights = reformulate(weight_col), data = sub)
+    est <- svyciprop(reformulate(indicator_col), des, method = "logit")
+    tibble(year = yr, pct = as.numeric(est) * 100,
+           ci_low = confint(est)[1] * 100, ci_high = confint(est)[2] * 100, n = nrow(sub))
+  })
+}
+
+# Same idea across a whole list of 0/1 indicator columns at once, stacked long -
+# used for every multi-item battery below.
+prop_table_by_item <- function(data, cols, weight_col = "weight_common") {
+  map_dfr(cols, function(col) prop_by_year(data, col, weight_col) %>% mutate(item = col, .before = 1))
+}
+
+# A weighted mean + 95% CI for a numeric score column, one row per year. Only used
+# for the AI-matrix 1-5 score view, where the estimand really is a mean, not a
+# proportion - svyciprop doesn't apply here.
+mean_by_year <- function(data, value_col, weight_col = "weight_common") {
+  map_dfr(levels(data$year), function(yr) {
+    sub <- data %>% filter(year == yr, !is.na(.data[[value_col]]))
+    des <- svydesign(ids = ~1, weights = reformulate(weight_col), data = sub)
+    est <- svymean(reformulate(value_col), des)
+    tibble(year = yr, estimate = as.numeric(est),
+           ci_low = confint(est)[1], ci_high = confint(est)[2], n = nrow(sub))
+  })
+}
+
+# All categories of one factor at once, with the covariance-aware SEs svymean()
+# gives for a factor's proportions (not the same as computing each category
+# separately and ignoring how they trade off against each other) - used for the
+# seek-frequency and collapsed AI good/bad/neither distributions.
+factor_props_by_year <- function(data, factor_col, weight_col = "weight_common") {
+  map_dfr(levels(data$year), function(yr) {
+    sub <- data %>% filter(year == yr, !is.na(.data[[factor_col]]))
+    des <- svydesign(ids = ~1, weights = reformulate(weight_col), data = sub)
+    est <- svymean(reformulate(factor_col), des)
+    tibble(year = yr,
+           category = sub(paste0("^", factor_col), "", names(est)),
+           pct = as.numeric(est) * 100,
+           ci_low = confint(est)[, 1] * 100,
+           ci_high = confint(est)[, 2] * 100)
+  })
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## Plotting helpers ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# The one chart form used everywhere below where the comparison is "a single
+# number per item, 2024 vs. 2026": a dot per year, joined by a line, with a 95% CI
+# whisker. show_ci = FALSE is used only for the source-seeking rank panels, where
+# rank is a deterministic function of the estimate and has no standard error of
+# its own.
+plot_dumbbell <- function(df, x_label, show_ci = TRUE, sort_desc_change = TRUE) {
+  wide <- df %>% select(item, year, pct) %>% pivot_wider(names_from = year, values_from = pct, names_prefix = "y")
+  ord <- if (sort_desc_change) {
+    wide %>% mutate(chg = abs(y2026 - y2024)) %>% arrange(chg) %>% pull(item)
+  } else {
+    wide %>% arrange(y2026) %>% pull(item)
+  }
+  df <- df %>% mutate(item = factor(item, levels = ord))
+
+  p <- ggplot(df, aes(x = pct, y = item)) +
+    geom_line(aes(group = item), color = "grey75", linewidth = 0.6)
+  if (show_ci) {
+    p <- p + geom_linerange(aes(xmin = ci_low, xmax = ci_high, color = year), linewidth = 2, alpha = 0.35)
+  }
+  # Two point layers rather than one geom_point(aes(shape = year)): on the rank
+  # charts, an exact tie between years is common, and a single layer would let
+  # 2026's solid dot completely hide 2024's. Drawing the earlier year first as a
+  # slightly larger open ring means a tie still shows as a visible ring around
+  # the later year's dot instead of erasing it.
+  yr_levels <- names(YEAR_COLORS)   # df$year is plain character here, not a factor - don't rely on levels()
+  p <- p +
+    geom_point(data = df %>% filter(year == yr_levels[1]), aes(color = year), size = 4.2, shape = 1, stroke = 1.4) +
+    geom_point(data = df %>% filter(year == yr_levels[2]), aes(color = year), size = 3, shape = 16)
+  p + scale_color_manual(values = YEAR_COLORS, name = NULL) +
+    labs(x = x_label, y = NULL) +
+    theme(legend.position = "top", panel.grid.minor = element_blank())
+}
+
+# The chart form for "full category distribution per item, 2024 vs. 2026": one
+# stacked bar per year, one segment per response category. `colors` must be a
+# named vector covering every level of `category`, in display order.
+plot_stacked_props <- function(df, colors, x_label = "Weighted %") {
+  df <- df %>% mutate(category = factor(category, levels = names(colors)))
+  ggplot(df, aes(x = pct, y = year, fill = category)) +
+    geom_col(width = 0.65) +
+    facet_wrap(~item, ncol = 1, strip.position = "top") +
+    scale_fill_manual(values = colors, name = NULL) +
+    scale_x_continuous(expand = expansion(mult = c(0, .02))) +
+    labs(x = x_label, y = NULL) +
+    theme(legend.position = "top", panel.grid = element_blank(),
+          strip.text = element_text(hjust = 0, face = "bold"))
+}
+```
+
+## Methodology
+
+This report compares the 2024 and 2026 fields of the Election Information Survey on every question the two instruments asked in a genuinely comparable way, using `output/eis_cumulative.rds` (built by `eis_2026_04_cumulative_data.R`).
+
+Every estimate below uses `weight_common`, not each year's own delivered weight. Morning Consult changed the registered-voter weighting targets substantially between the two fields — the no-bachelor's-degree target moved from 40.6% to 57.6%, and the White share of the target moved from 58.6% to 76.4% — while the raw, unweighted samples barely moved at all. Because education and race correlate with the subject of this survey, comparing each year's own weighted numbers directly would mix real opinion change with an artifact of the target change itself. `weight_common` re-rakes both years to one shared demographic target, while preserving each year's own recalled-presidential-vote margin, so a difference in the charts below reflects a real difference between 2024 and 2026 respondents, not a difference in what each year's weight was correcting toward.
+
+Where the estimate is a proportion or a mean, the shaded whisker around each dot is a 95% confidence interval, calculated with the `survey` package on the `weight_common` design. Where the comparison is a rank rather than a raw level — noted explicitly in the source-seeking section — no confidence interval is shown, because a rank has no standard error of its own; the percentages underlying that ranking are given in a table instead.
+
+```{r helpers-2, include=FALSE}
+# Building the 0/1 numeric indicators used throughout, once, so every section below
+# just references a plain column name. The reg_src_/run_src_/won_src_ columns
+# arrive as factors with levels "0"/"1" rather than numeric.
+src_cols <- names(cum) %>% keep(~ str_detect(.x, "^(reg|run|won)_src_"))
+cum <- cum %>% mutate(across(all_of(src_cols), ~ as.numeric(as.character(.x))))
+
+cum <- cum %>%
+  mutate(
+    right_direction = as.numeric(country_direction == "Right Direction"),
+    conf_own_vote_top2      = as.numeric(as.integer(conf_own_vote) >= 3),
+    conf_local_votes_top2   = as.numeric(as.integer(conf_local_votes) >= 3),
+    conf_state_votes_top2   = as.numeric(as.integer(conf_state_votes) >= 3),
+    conf_national_votes_top2 = as.numeric(as.integer(conf_national_votes) >= 3),
+    concern_misinfo_top2          = as.numeric(as.integer(concern_misinfo) >= 3),
+    concern_ai_disinfo_top2       = as.numeric(as.integer(concern_ai_disinfo) >= 3),
+    concern_foreign_top2          = as.numeric(as.integer(concern_foreign) >= 3),
+    concern_ineligible_votes_top2 = as.numeric(as.integer(concern_ineligible_votes) >= 3),
+    concern_overturn_top2         = as.numeric(as.integer(concern_overturn) >= 3),
+    concern_biased_count_top2     = as.numeric(as.integer(concern_biased_count) >= 3),
+    concern_mail_ballots_top2     = as.numeric(as.integer(concern_mail_ballots) >= 3),
+    concern_guns_intimidation_top2 = as.numeric(as.integer(concern_guns_intimidation) >= 3),
+    concern_post_violence_top2    = as.numeric(as.integer(concern_post_violence) >= 3),
+    concern_polling_problems_top2  = as.numeric(as.integer(concern_polling_problems) >= 3)
+  )
+
+# The AI good/bad matrix collapsed from its 1-5 reoriented integer score (1 = very
+# bad thing ... 5 = very good thing) to three categories, for the proportions view.
+ai_ok_i_cols <- names(cum) %>% keep(~ str_detect(.x, "^ai_ok_.*_i$"))
+for (col in ai_ok_i_cols) {
+  cum[[paste0(col, "_cat3")]] <- factor(
+    case_when(cum[[col]] <= 2 ~ "Bad", cum[[col]] == 3 ~ "Neither", cum[[col]] >= 4 ~ "Good", TRUE ~ NA_character_),
+    levels = c("Bad", "Neither", "Good"))
+}
+```
+
+## Is the Country Headed in the Right Direction?
+
+```{r fig.height=1.6}
+prop_by_year(cum, "right_direction") %>%
+  mutate(item = "Right direction") %>%
+  plot_dumbbell("Weighted % saying \"right direction\"")
+```
+
+## Most Important Issue
+
+```{r fig.height=4.2}
+issue_labels <- c(
+  "Economic Issues – like taxes, wages, jobs, unemployment, and spending" = "Economic issues",
+  "Security Issues – like terrorism, foreign policy, and border security" = "Security issues",
+  "Health Care Issues – like the 2010 health care law, Medicaid, other challenges" = "Health care issues",
+  "Seniors Issues – like Medicare and Social Security" = "Seniors' issues",
+  "Women's Issues – like birth control, abortion, and equal pay" = "Women's issues",
+  "Education Issues – like school standards, class sizes, school choice, and student loans" = "Education issues",
+  "Energy Issues – like carbon emissions, cost of electricity/gasoline, or renewables" = "Energy issues",
+  "Other:" = "Other")
+
+factor_props_by_year(cum, "top_issue") %>%
+  mutate(item = recode(category, !!!issue_labels)) %>%
+  plot_dumbbell("Weighted % naming this the most important issue")
+```
+
+## How Often Voters Seek Election Information
+
+Shown as the full weighted distribution across all five frequency categories, not collapsed to a single cutoff — these categories are ordered (more/less often) but not evenly spaced, so a weighted mean would treat unequal gaps as if they were equal.
+
+```{r fig.height=4.5, fig.width=9.5}
+seek_labels <- c(seek_register = "How to register and vote",
+                  seek_elections_run = "How elections are run",
+                  seek_who_won = "Who won an election")
+
+# Short display labels for the legend only - the full question-length category
+# text ("Only around major election dates or deadlines (e.g. Voter registration
+# deadlines, Election Day)") overflowed the plot when used as-is.
+seek_freq_short <- c("Never" = "Never",
+  "Only around major election dates or deadlines (e.g. Voter registration deadlines, Election Day)" = "Only near major dates",
+  "A few times in the weeks around major election dates or deadlines" = "A few times near major dates",
+  "Regularly in the weeks around major election dates or deadlines" = "Regularly near major dates",
+  "Consistently throughout the year" = "Consistently all year")
+
+map_dfr(names(seek_labels), function(col) factor_props_by_year(cum, col) %>% mutate(item = seek_labels[[col]], .before = 1)) %>%
+  mutate(category = seek_freq_short[category]) %>%
+  plot_stacked_props(colors = setNames(SEEK_RAMP, seek_freq_short)) +
+  guides(fill = guide_legend(nrow = 2))
+```
+
+## Where Voters Look for Election Information
+
+Both years cap respondents at three selections, but the menus behind that cap differ in size — 2026 added two heavily-selected options (an online search engine and an AI chatbot) with no 2024 counterpart, and because the cap is shared, those two compete with the eight indicators below for the same three slots. A raw level change in any of the eight is therefore partly menu displacement, not opinion change. The rank each source holds within its own year is more robust to this than the raw percentage is, so rank is the primary comparison here; the underlying weighted percentages (with 95% CIs) are given in the table under each chart for reference.
+
+```{r}
+src_labels <- c(local_officials = "Local/county officials", state_officials = "State officials",
+                  federal_site = "Federal agency/website", news_media = "News media",
+                  social = "Social media influencer", friends_family = "Friends/family",
+                  advocacy = "Election-integrity/advocacy orgs", campaign = "Candidate, campaign, or party")
+
+source_battery <- function(prefix, title) {
+  cols <- paste0(prefix, "_src_", names(src_labels))
+  tab <- prop_table_by_item(cum, cols) %>%
+    mutate(item = src_labels[str_remove(item, paste0("^", prefix, "_src_"))]) %>%
+    group_by(year) %>% mutate(rank = rank(-pct, ties.method = "min")) %>% ungroup()
+
+  print(plot_dumbbell(tab %>% rename(pct_ = pct, pct = rank), "Rank (1 = most selected)", show_ci = FALSE) +
+          scale_x_continuous(breaks = 1:8))
+
+  tab %>% transmute(Source = item, Year = year, `Weighted %` = round(pct, 1),
+                     `95% CI` = paste0(round(ci_low, 1), "–", round(ci_high, 1)), Rank = rank) %>%
+    arrange(Source, Year) %>% kable()
+}
+```
+
+### Register and vote
+
+```{r fig.height=4}
+source_battery("reg", "Register and vote")
+```
+
+### How elections are run
+
+```{r fig.height=4}
+source_battery("run", "How elections are run")
+```
+
+### Who won
+
+```{r fig.height=4}
+source_battery("won", "Who won")
+```
+
+## Attitudes Toward AI Use in Elections
+
+Two views of the same ten items. The first treats each item's 1-5 "very bad thing" to "very good thing" score as a mean — a simplification, since the scale is ordinal and the gaps between its categories are not guaranteed to be equal. The second avoids that assumption by collapsing to three categories (bad / neither / good) and showing the weighted proportions directly.
+
+```{r ai-labels, include=FALSE}
+ai_labels <- c(
+  ai_ok_voter_candidate_info = "Voters use AI chatbots for candidate/issue info",
+  ai_ok_voter_how_to_vote = "Voters use AI chatbots to learn how to cast a ballot",
+  ai_ok_voter_how_to_register = "Voters use AI chatbots to learn how to register",
+  ai_ok_voter_decide = "Voters use AI chatbots to decide who to vote for",
+  ai_ok_voter_values_align = "Voters use AI chatbots to compare candidates' positions to their values",
+  ai_ok_campaign_undisclosed = "Campaigns use undisclosed AI-generated content",
+  ai_ok_campaign_disclosed = "Campaigns use disclosed AI-generated content",
+  ai_ok_cand_photo_edit = "Candidates use AI to edit photos/videos",
+  ai_ok_cand_microtarget = "Candidates use AI to microtarget ads",
+  ai_ok_cand_answer_questions = "Candidates use AI chatbots to answer voter questions")
+```
+
+### Mean score (1-5)
+
+```{r fig.height=5.5, fig.width=9}
+mean_cols <- paste0(names(ai_labels), "_i")
+map_dfr(mean_cols, function(col) mean_by_year(cum, col) %>% mutate(item = col, .before = 1)) %>%
+  mutate(item = ai_labels[str_remove(item, "_i$")], pct = estimate) %>%
+  plot_dumbbell("Weighted mean (1 = bad, 5 = good)")
+```
+
+### Weighted proportions (bad / neither / good)
+
+```{r fig.height=11}
+cat3_cols <- paste0(names(ai_labels), "_i_cat3")
+map_dfr(cat3_cols, function(col) factor_props_by_year(cum, col) %>% mutate(item = ai_labels[[str_remove(col, "_i_cat3$")]], .before = 1)) %>%
+  plot_stacked_props(colors = AI_STATUS_COLORS)
+```
+
+## Voting Experience
+
+```{r fig.height=1.6}
+prop_by_year(cum, "vote_exp_positive_top2") %>%
+  mutate(item = "Own voting experience was positive") %>%
+  plot_dumbbell("Weighted % agreeing")
+```
+
+## Confidence Votes Will Be Counted as Intended
+
+"Confident" combines "somewhat confident" and "very confident" into one weighted percentage — the same convention `eis_2026_03_common_weights.R`'s `compare_years()` helper uses for these same items. Three of the four items are a clean four-point scale in both years. The fourth, confidence in your own vote, is not: 2026's wording (`BPC40`) adds a fifth option, "I do not plan to vote in the November 2026 midterm elections," that 2024's wording (`BPC20`) does not have. The 97 respondents who chose it are excluded from this item's base in 2026, the same way "don't know" respondents are excluded from every item's base in both years — so the percentage below is out of everyone who gave a substantive confidence answer, not out of everyone who took the survey.
+
+```{r fig.height=3}
+conf_labels <- c(conf_own_vote_top2 = "Your own vote", conf_local_votes_top2 = "Votes in your community",
+                   conf_state_votes_top2 = "Votes in your state", conf_national_votes_top2 = "Votes nationwide")
+
+map_dfr(names(conf_labels), function(col) prop_by_year(cum, col) %>% mutate(item = conf_labels[[col]], .before = 1)) %>%
+  plot_dumbbell("Weighted % confident")
+```
+
+## Concern About Election Problems
+
+"Concerned" combines "somewhat concerned" and "very concerned," the two upper categories of the four-point scale, into one weighted percentage.
+
+```{r fig.height=5.5}
+concern_labels <- c(
+  concern_misinfo_top2 = "Inaccurate or misleading election information",
+  concern_ai_disinfo_top2 = "AI used to spread disinformation",
+  concern_foreign_top2 = "Foreign interference",
+  concern_ineligible_votes_top2 = "Ineligible votes being counted",
+  concern_overturn_top2 = "Attempts to overturn a fair election's results",
+  concern_biased_count_top2 = "Biased or inaccurate ballot counting",
+  concern_mail_ballots_top2 = "Illegal or improper mail ballot/drop box use",
+  concern_guns_intimidation_top2 = "Guns, violence, or intimidation at voting locations",
+  concern_post_violence_top2 = "Violence or unrest after election day",
+  concern_polling_problems_top2 = "Long lines or equipment problems at polls")
+
+map_dfr(names(concern_labels), function(col) prop_by_year(cum, col) %>% mutate(item = concern_labels[[col]], .before = 1)) %>%
+  plot_dumbbell("Weighted % concerned")
+```

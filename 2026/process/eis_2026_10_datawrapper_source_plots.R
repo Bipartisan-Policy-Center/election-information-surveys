@@ -62,9 +62,13 @@ BAR_COLOR   <- "#2a78d6"
 RANK_COLOR  <- "#eb6834"
 NEED_LEVELS <- c("Registering and Voting", "How Elections Are Run", "Who Won an Election")
 NEED_COLORS <- c("Registering and Voting" = "#2a78d6", "How Elections Are Run" = "#eb6834", "Who Won an Election" = "#3fa34d")
+NEED_SLUGS  <- c("Registering and Voting" = "reg", "How Elections Are Run" = "run", "Who Won an Election" = "won")
 
 # For Parts G-K (AI/confidence/concern/noncitizen batch), ported from eis_2026_09_ai_confidence_concern_report.R.
-YEAR_COLORS      <- c("2024" = "#2a78d6", "2026" = "#eb6834")
+# "2022" is only ever present in Part I.1's own cum_conf (the confidence trend, the one series 2022
+# has data for) - harmless to define here for every other YEAR_COLORS-using chart, which never has
+# a "2022" level in its own data for this color to match against.
+YEAR_COLORS      <- c("2022" = "#6a3d9a", "2024" = "#2a78d6", "2026" = "#eb6834")
 PID_COLORS       <- c(Dem = "#2a78d6", Ind = "#898781", Rep = "#d03b3b")
 AI_STATUS_COLORS <- c("Bad" = "#d03b3b", "Neither" = "#898781", "Good" = "#0ca30c")
 RAMP_4PT         <- c("#b7d3f6", "#6da7ec", "#2a78d6", "#0d366b")
@@ -140,6 +144,17 @@ factor_props <- function(data, factor_col, weight_col = "weight") {
          ci_low   = confint(est)[, 1] * 100,
          ci_high  = confint(est)[, 2] * 100,
          n        = nrow(sub))
+}
+
+# Cross-tab of factor_col by every level of by_col (e.g. age4, pid3) - the subgroup-breakdown
+# analogue of factor_props() above. Ported from eis_2026_06_design_data.R's C.6; not otherwise
+# used in this script until F.1.4 below.
+factor_props_by <- function(data, factor_col, by_col, weight_col = "weight") {
+  data %>%
+    filter(!is.na(.data[[by_col]])) %>%
+    group_by(.data[[by_col]]) %>%
+    group_modify(~ factor_props(.x, factor_col, weight_col)) %>%
+    ungroup()
 }
 
 # Orders `items` by `pct` ascending (ggplot draws factor level 1 at the bottom of a horizontal
@@ -549,17 +564,20 @@ p <- ggplot(filter(which_exclude_combined_df, metric == "Selected (top 3)"), aes
         panel.grid.major.y = element_blank())
 p
 
-# Unlike the mode/social/bot wide exports, `need` stays a row value here rather than becoming
-# column headers - Datawrapper has no facet equivalent, so recreating this 3-panel chart there
-# means one Datawrapper chart per need, each built from this same shape the single-need which-
-# sources charts already use (item_tag, item, n, selected_pct, ci_low, ci_high, ranked_pct). This
-# one CSV holds all 3 needs' rows together (filter by `need` per chart).
+# Unlike the mode/social/bot wide exports, this chart is faceted by need - Datawrapper has no
+# facet equivalent, so recreating it there means one Datawrapper chart per need. Split into 3
+# CSVs, one per need (same shape the single-need which-sources charts already use: item_tag, item,
+# n, selected_pct, ci_low, ci_high, ranked_pct), each keeping the "Other, please specify" exclusion
+# already applied to which_exclude_combined_df (11 items, not the 12 in reg/run/won_exclude_which_wide.csv).
 which_exclude_combined_wide_df <- which_exclude_combined_df %>%
   filter(metric == "Selected (top 3)") %>%
   select(need, item_tag, item, n, selected_pct = pct, ci_low, ci_high) %>%
   left_join(which_exclude_combined_df %>% filter(metric == "Ranked #1") %>% select(need, item_tag, ranked_pct = pct),
             by = c("need", "item_tag"))
-write.csv(which_exclude_combined_wide_df, file.path(plots.dir, "which_exclude_combined_wide.csv"), row.names = FALSE)
+for (nd in NEED_LEVELS) {
+  write.csv(which_exclude_combined_wide_df %>% filter(need == nd) %>% select(-need),
+            file.path(plots.dir, paste0("which_exclude_", NEED_SLUGS[[nd]], "_wide.csv")), row.names = FALSE)
+}
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ## E.4.2. Never-seekers only ---- ARTICLEPLOT ------
@@ -621,12 +639,16 @@ p <- ggplot(filter(which_never_combined_df, metric == "Selected (top 3)"), aes(y
         panel.grid.major.y = element_blank())
 p
 
+# Split into 3 CSVs, one per need, same reasoning as E.4.1's export above.
 which_never_combined_wide_df <- which_never_combined_df %>%
   filter(metric == "Selected (top 3)") %>%
   select(need, item_tag, item, n, selected_pct = pct, ci_low, ci_high) %>%
   left_join(which_never_combined_df %>% filter(metric == "Ranked #1") %>% select(need, item_tag, ranked_pct = pct),
             by = c("need", "item_tag"))
-write.csv(which_never_combined_wide_df, file.path(plots.dir, "which_never_combined_wide.csv"), row.names = FALSE)
+for (nd in NEED_LEVELS) {
+  write.csv(which_never_combined_wide_df %>% filter(need == nd) %>% select(-need),
+            file.path(plots.dir, paste0("which_never_", NEED_SLUGS[[nd]], "_wide.csv")), row.names = FALSE)
+}
 
 
 
@@ -650,7 +672,7 @@ write.csv(which_never_combined_wide_df, file.path(plots.dir, "which_never_combin
 ### ####################################################################################### ###
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - -
-## F.1.1. Exclude never-seekers ----
+## F.1.1. Exclude never-seekers ---- ARTICLEPLOT ------
 # - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 mode_exclude_combined_df <- bind_rows(
@@ -666,23 +688,32 @@ mode_exclude_combined_df <- bind_rows(
 
 mode_exclude_levels <- setdiff(levels(mode_exclude_combined_df$category), c("Other, please specify", "Don't know"))
 mode_exclude_colors <- setNames(colorRampPalette(c("#b7d3f6", "#0d366b"))(length(mode_exclude_levels)), mode_exclude_levels)
-mode_exclude_combined_df <- mode_exclude_combined_df %>% 
-  mutate(category = fct_relevel(category, 
+mode_exclude_combined_df <- mode_exclude_combined_df %>%
+  mutate(category = fct_relevel(category,
                                 "I visit my local (town, city, county) or state election office's website",
                                 "I call my local or state election office on the phone",
                                 "I visit my local or state election office in person"))
 
-p <- ggplot(mode_exclude_combined_df, aes(x = need, y = pct, fill = category)) +
+# Same "(n = X)" treatment as E.4.1/F.1.2 - n differs by need (each is its own base), so a two-line
+# "\n(n = X)" label is built per need rather than a single subtitle that could only state one.
+mode_exclude_n_by_need <- mode_exclude_combined_df %>% distinct(need, n) %>% deframe()
+mode_exclude_combined_df <- mode_exclude_combined_df %>%
+  mutate(need_label = factor(paste0(need, "\n(n = ", trimws(format(mode_exclude_n_by_need[as.character(need)], big.mark = ",")), ")"),
+                              levels = paste0(NEED_LEVELS, "\n(n = ", trimws(format(mode_exclude_n_by_need[NEED_LEVELS], big.mark = ",")), ")")))
+
+p <- ggplot(mode_exclude_combined_df, aes(y = need_label, x = pct, fill = category)) +
   geom_col(position = position_dodge(width = 0.9)) +
-  geom_errorbar(aes(ymin = ci_low, ymax = ci_high), position = position_dodge(width = 0.9),
-                width = 0.2, color = "grey35", alpha = 0.6) +
+  geom_errorbar(aes(xmin = ci_low, xmax = ci_high), position = position_dodge(width = 0.9),
+                orientation = "y", width = 0.2, color = "grey35", alpha = 0.6) +
+  geom_text(aes(x = ci_high, label = paste0(round(pct), "%")), position = position_dodge(width = 0.9),
+            hjust = -0.15, size = 3.1, color = "grey30") +
   scale_fill_manual(values = mode_exclude_colors, name = NULL, labels = wrap40) +
-  scale_y_continuous(expand = expansion(mult = c(0, .02))) +
-  labs(y = "Weighted %", x = NULL,
+  scale_x_continuous(expand = expansion(mult = c(0, .125))) +
+  labs(x = "Weighted %", y = NULL,
        title = wrap_title("How Voters Contact Local or State Election Officials"),
        subtitle = "Among respondents who seek this information, by information need") +
   theme(legend.position = "bottom",
-        panel.grid.major.x = element_blank())
+        panel.grid.major.y = element_blank())
 p
 
 mode_exclude_combined_wide_df <- mode_exclude_combined_df %>%
@@ -696,7 +727,7 @@ write.csv(mode_exclude_combined_wide_df, file.path(plots.dir, "mode_exclude_comb
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - -
-## F.1.2. Everyone included ---- ARTICLEPLOT ------
+## F.1.2. Everyone included ---- 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 mode_include_combined_df <- bind_rows(
@@ -718,17 +749,27 @@ mode_include_combined_df <- mode_include_combined_df %>%
                                 "I call my local or state election office on the phone",
                                 "I visit my local or state election office in person"))
 
-p <- ggplot(mode_include_combined_df, aes(x = need, y = pct, fill = category)) +
+# Same "(n = X)" treatment as E.4.1's facet strips, just on an axis tick label here instead of a
+# facet strip - n differs by need (each is its own base), so a two-line "\n(n = X)" label is built
+# per need rather than a single subtitle that could only ever state one of the three.
+mode_include_n_by_need <- mode_include_combined_df %>% distinct(need, n) %>% deframe()
+mode_include_combined_df <- mode_include_combined_df %>%
+  mutate(need_label = factor(paste0(need, "\n(n = ", trimws(format(mode_include_n_by_need[as.character(need)], big.mark = ",")), ")"),
+                              levels = paste0(NEED_LEVELS, "\n(n = ", trimws(format(mode_include_n_by_need[NEED_LEVELS], big.mark = ",")), ")")))
+
+p <- ggplot(mode_include_combined_df, aes(y = need_label, x = pct, fill = category)) +
   geom_col(position = position_dodge(width = 0.9)) +
-  geom_errorbar(aes(ymin = ci_low, ymax = ci_high), position = position_dodge(width = 0.9),
-                width = 0.2, color = "grey65", alpha = 0.6) +
+  geom_errorbar(aes(xmin = ci_low, xmax = ci_high), position = position_dodge(width = 0.9),
+                orientation = "y", width = 0.2, color = "grey65", alpha = 0.6) +
+  geom_text(aes(x = ci_high, label = paste0(round(pct), "%")), position = position_dodge(width = 0.9),
+            hjust = -0.15, size = 3.1, color = "grey30") +
   scale_fill_manual(values = mode_include_colors, name = NULL, labels = wrap40) +
-  scale_y_continuous(expand = expansion(mult = c(0, .02))) +
-  labs(y = "Weighted %", x = NULL,
+  scale_x_continuous(expand = expansion(mult = c(0, .125))) +
+  labs(x = "Weighted %", y = NULL,
        title = wrap_title("How Voters Contact Local or State Election Officials"),
        subtitle = "Among all respondents (actual- and hypothetical-arm pooled), by information need") +
   theme(legend.position = "bottom",
-        panel.grid.major.x = element_blank())
+        panel.grid.major.y = element_blank())
 p
 
 mode_include_combined_wide_df <- mode_include_combined_df %>%
@@ -782,6 +823,53 @@ mode_never_combined_wide_df <- mode_never_combined_df %>%
   pivot_wider(id_cols = need, names_from = category_key, values_from = pct, names_glue = "{category_key}_pct") %>%
   select(need, website_pct, phone_pct, in_person_pct)
 write.csv(mode_never_combined_wide_df, file.path(plots.dir, "mode_never_combined_wide.csv"), row.names = FALSE)
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## F.1.4. Everyone included, by age group ----
+# - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Same population arm and variables as F.1.2, cross-tabbed by age4 instead of collapsed across
+# it. Reuses mode_include_colors (computed in F.1.2, just above) so website/phone/in-person keep
+# the same color in both charts.
+mode_include_age_df <- bind_rows(
+  factor_props_by(data, "reg_official_mode_pooled", "age4") %>% mutate(need = "Registering and Voting", .before = 1),
+  factor_props_by(data, "run_official_mode_pooled", "age4") %>% mutate(need = "How Elections Are Run", .before = 1),
+  factor_props_by(data, "won_official_mode_pooled", "age4") %>% mutate(need = "Who Won an Election", .before = 1)
+) %>%
+  filter(!category %in% c("Other, please specify", "Don't know")) %>%
+  mutate(need = fct_relevel(need, "Registering and Voting", "How Elections Are Run", "Who Won an Election"),
+         category = case_when(!grepl("website", category) ~ gsub(" \\(town, city, county\\)", "", category),
+                              TRUE ~ category),
+         category = as.factor(category))
+
+mode_include_age_df <- mode_include_age_df %>%
+  mutate(category = fct_relevel(category,
+                                "I visit my local (town, city, county) or state election office's website",
+                                "I call my local or state election office on the phone",
+                                "I visit my local or state election office in person"))
+
+p <- ggplot(mode_include_age_df, aes(x = age4, y = pct, fill = category)) +
+  geom_col(position = position_dodge(width = 0.9)) +
+  geom_errorbar(aes(ymin = ci_low, ymax = ci_high), position = position_dodge(width = 0.9),
+                width = 0.2, color = "grey65", alpha = 0.6) +
+  facet_wrap(~ need, nrow = 1) +
+  scale_fill_manual(values = mode_include_colors, name = NULL, labels = wrap40) +
+  scale_y_continuous(expand = expansion(mult = c(0, .02))) +
+  labs(y = "Weighted %", x = NULL,
+       title = wrap_title("How Voters Contact Local or State Election Officials"),
+       subtitle = "Among all respondents (actual- and hypothetical-arm pooled), by age group and information need") +
+  theme(legend.position = "bottom",
+        panel.grid.major.x = element_blank())
+p
+
+mode_include_age_wide_df <- mode_include_age_df %>%
+  mutate(category_key = case_when(grepl("website", category) ~ "website",
+                                   grepl("phone", category) ~ "phone",
+                                   TRUE ~ "in_person")) %>%
+  pivot_wider(id_cols = c(need, age4), names_from = category_key, values_from = pct, names_glue = "{category_key}_pct") %>%
+  select(need, age4, website_pct, phone_pct, in_person_pct)
+write.csv(mode_include_age_wide_df, file.path(plots.dir, "mode_include_by_age_wide.csv"), row.names = FALSE)
 
 
 ### ####################################################################################### ###
@@ -1089,7 +1177,7 @@ p <- ggplot(ai_prevalence_df, aes(x = pct, y = category)) +
   theme(panel.grid.major.y = element_blank())
 p
 
-write.csv(ai_prevalence_df %>% select(category, pct, ci_low, ci_high, n), file.path(plots.dir, "ai_prevalence_wide.csv"), row.names = FALSE)
+#write.csv(ai_prevalence_df %>% select(category, pct, ci_low, ci_high, n), file.path(plots.dir, "ai_prevalence_wide.csv"), row.names = FALSE)
 
 ai_tool_freq_df <- factor_props(data, "ai_tool_freq") %>%
   mutate(category = factor(category, levels = levels(data$ai_tool_freq)))
@@ -1105,7 +1193,7 @@ p <- ggplot(ai_tool_freq_df, aes(x = pct, y = category)) +
   theme(panel.grid.major.y = element_blank())
 p
 
-write.csv(ai_tool_freq_df %>% select(category, pct, ci_low, ci_high, n), file.path(plots.dir, "ai_tool_freq_wide.csv"), row.names = FALSE)
+#write.csv(ai_tool_freq_df %>% select(category, pct, ci_low, ci_high, n), file.path(plots.dir, "ai_tool_freq_wide.csv"), row.names = FALSE)
 
 ai_detect_conf_df <- factor_props(data, "ai_detect_conf") %>%
   mutate(category = factor(category, levels = levels(data$ai_detect_conf)))
@@ -1170,8 +1258,8 @@ p <- ggplot(ai_mean_trend_df, aes(x = pct, y = item)) +
   theme(legend.position = "top")
 p
 
-write.csv(ai_mean_trend_df %>% pivot_wider(id_cols = item, names_from = year, values_from = c(pct, ci_low, ci_high, n)),
-          file.path(plots.dir, "ai_mean_trend_wide.csv"), row.names = FALSE)
+# write.csv(ai_mean_trend_df %>% pivot_wider(id_cols = item, names_from = year, values_from = c(pct, ci_low, ci_high, n)),
+#           file.path(plots.dir, "ai_mean_trend_wide.csv"), row.names = FALSE)
 
 ai_cat3_trend_df <- map_dfr(paste0(names(ai_labels), "_i_cat3"), function(col)
   factor_props_by_year(cum, col) %>% mutate(item = ai_labels[[str_remove(col, "_i_cat3$")]], .before = 1))
@@ -1183,13 +1271,21 @@ p <- ggplot(ai_cat3_trend_df %>% mutate(category = factor(category, levels = c("
   scale_x_continuous(expand = expansion(mult = c(0, .02))) +
   labs(x = "Weighted %", y = NULL,
        title = wrap_title("Attitudes Toward AI Use in Elections, 2024 vs. 2026"),
-       subtitle = "Share rating each use bad / neither / good, by item") +
+       #subtitle = "Share rating each use bad / neither / good, by item"
+       ) +
   theme(legend.position = "top", panel.grid = element_blank(),
         strip.text = element_text(hjust = 0, face = "bold", size = 8))
 p
 
-write.csv(ai_cat3_trend_df %>% pivot_wider(id_cols = c(item, year), names_from = category, values_from = pct),
-          file.path(plots.dir, "ai_cat3_trend_wide.csv"), row.names = FALSE)
+# This chart is faceted by item (10 panels), so - same reasoning as the which_exclude/never split
+# above - it becomes 10 CSVs, one per item, each a plain 2-row (2024/2026) stacked bar shape.
+ai_cat3_trend_wide_df <- ai_cat3_trend_df %>% pivot_wider(id_cols = c(item, year), names_from = category, values_from = pct)
+for (col in paste0(names(ai_labels), "_i_cat3")) {
+  item_label <- ai_labels[[str_remove(col, "_i_cat3$")]]
+  item_slug  <- str_remove(str_remove(col, "_i_cat3$"), "^ai_ok_")
+  write.csv(ai_cat3_trend_wide_df %>% filter(item == item_label) %>% select(-item),
+            file.path(plots.dir, paste0("ai_cat3_trend_", item_slug, "_wide.csv")), row.names = FALSE)
+}
 
 
 ### ####################################################################################### ###
@@ -1236,12 +1332,23 @@ write.csv(ai_index_df, file.path(plots.dir, "ai_index_wide.csv"), row.names = FA
 ##### #
 
 ### ####################################################################################### ###
-## I.1. Top-2 trend, 2024 vs. 2026 ----
+## I.1. Top-2 trend, 2022 vs. 2024 vs. 2026 ----
 ### ####################################################################################### ###
 
-conf_top2_labels <- c(conf_own_vote_top2 = "Your Own Vote", conf_local_votes_top2 = "Votes in Your Community",
+# 2022 fielded the identical 4-item battery, prospectively, on the same 4-point + DK scale (see
+# eis_2026_11_cumulative_2022_2023_design.md) - the only content anywhere in this script 2022
+# actually has. Loaded as a separate `cum_conf` rather than widening the shared `cum` (used by
+# every other chart in Parts H-K), for two reasons: `cum$year` was already coerced to NA for 2022
+# rows back at Part G's `factor(year, levels = c(2024, 2026))`, so that coercion can't be undone on
+# the same object; and every other chart in this script (AI, concern, noncitizen/USPS) genuinely
+# has no 2022 data, so widening `cum` itself would risk silently adding an empty 2022 category to
+# charts that have nothing to show for it.
+cum_conf <- readRDS(file.path(out.dir, "eis_cumulative.rds")) %>%
+  mutate(year = factor(year, levels = c(2022, 2024, 2026)))
+
+conf_top2_labels <- c(conf_own_vote_top2 = "Your Own Vote", conf_local_votes_top2 = "Votes in Your County/City",
                        conf_state_votes_top2 = "Votes in Your State", conf_national_votes_top2 = "Votes Nationwide")
-cum <- cum %>%
+cum_conf <- cum_conf %>%
   mutate(
     conf_own_vote_top2       = as.numeric(as.integer(conf_own_vote) >= 3),
     conf_local_votes_top2    = as.numeric(as.integer(conf_local_votes) >= 3),
@@ -1249,21 +1356,40 @@ cum <- cum %>%
     conf_national_votes_top2 = as.numeric(as.integer(conf_national_votes) >= 3)
   )
 
-conf_trend_df <- map_dfr(names(conf_top2_labels), function(col) prop_by_year(cum, col) %>% mutate(item = conf_top2_labels[[col]], .before = 1))
+# prop_by_year()'s default weight_col ("weight_common") now covers 2022 too -
+# eis_2026_03_common_weights.R was extended to re-rake 2022 to the same common demographic target as
+# 2024/2026, so this chart can use the same default every other trend chart in this script uses, on
+# the same consistent weighting basis across all three years.
+conf_trend_df <- map_dfr(names(conf_top2_labels), function(col)
+  prop_by_year(cum_conf, col) %>% mutate(item = conf_top2_labels[[col]], .before = 1))
 
 conf_trend_order <- conf_trend_df %>% select(item, year, pct) %>% pivot_wider(names_from = year, values_from = pct, names_prefix = "y") %>%
-  mutate(chg = abs(y2026 - y2024)) %>% arrange(chg) %>% pull(item)
+  mutate(chg = pmax(y2022, y2024, y2026, na.rm = TRUE) - pmin(y2022, y2024, y2026, na.rm = TRUE)) %>% arrange(chg) %>% pull(item)
 conf_trend_df <- conf_trend_df %>% mutate(item = factor(item, levels = conf_trend_order))
 
-p <- ggplot(conf_trend_df, aes(x = pct, y = item)) +
+# Previously: 3 separate geom_point() layers, each pre-filtered to one year, with shape/size set
+# as fixed layer arguments rather than mapped - color was the only aesthetic ggplot had to build a
+# legend key from, and each layer's shape was invisible to the other years' keys, which produced
+# an unlabeled/mismatched entry. shape (and size, to keep the hollow-circle year visually as heavy
+# as the filled ones) are now mapped to year too, same as color, so all three fold into one legend
+# with the right glyph per key - and mapping them means every layer carries all 3 years at once
+# instead of 3 redundant single-year layers.
+# position_dodge() on the linerange/point layers (re-enabled below) keeps the 3 years from sitting
+# on top of each other when their pct values land close together (e.g. "Votes in Your County/City")
+# - it offsets each year to its own sub-row within the item's row, the same way it would space out
+# separate fill/color groups on a discrete axis elsewhere in this script. The thin connecting line
+# stays undodged, straight through the row's center, as a faint spine rather than trying to track
+# 3 moving targets.
+p <- ggplot(conf_trend_df, aes(x = pct, y = item, color = year, shape = year)) +
   geom_line(aes(group = item), color = "grey75", linewidth = 0.6) +
-  geom_linerange(aes(xmin = ci_low, xmax = ci_high, color = year), linewidth = 2, alpha = 0.35) +
-  geom_point(data = filter(conf_trend_df, year == "2024"), aes(color = year), size = 4.2, shape = 1, stroke = 1.4) +
-  geom_point(data = filter(conf_trend_df, year == "2026"), aes(color = year), size = 3, shape = 16) +
+  geom_linerange(aes(xmin = ci_low, xmax = ci_high), position = position_dodge(width = 0.5), linewidth = 2, alpha = 0.35) +
+  geom_point(aes(size = year), position = position_dodge(width = 0.5), stroke = 1.4) +
   scale_color_manual(values = YEAR_COLORS, name = NULL) +
+  scale_shape_manual(values = c("2022" = 15, "2024" = 1, "2026" = 16), name = NULL) +
+  scale_size_manual(values = c("2022" = 3.4, "2024" = 4.2, "2026" = 3), name = NULL, guide = "none") +
   scale_x_continuous(expand = expansion(mult = c(0.02, .08))) +
   labs(x = "Weighted % Confident", y = NULL,
-       title = wrap_title("Confidence Votes Will Be Counted as Intended, 2024 vs. 2026"),
+       title = wrap_title("Confidence Votes Will Be Counted as Intended, 2022 vs. 2024 vs. 2026"),
        subtitle = wrap_subtitle("\"Confident\" combines somewhat + very confident")) +
   theme(legend.position = "top")
 p
@@ -1276,7 +1402,7 @@ write.csv(conf_trend_df %>% pivot_wider(id_cols = item, names_from = year, value
 ## I.2. Top-2 by party ID - 2026 only ----
 ### ####################################################################################### ###
 
-conf_labels <- c(conf_own_vote = "Your Own Vote", conf_local_votes = "Votes in Your Community",
+conf_labels <- c(conf_own_vote = "Your Own Vote", conf_local_votes = "Votes in Your County/City",
                   conf_state_votes = "Votes in Your State", conf_national_votes = "Votes Nationwide")
 data <- data %>% mutate(across(all_of(names(conf_labels)), ~ as.numeric(as.integer(.x) >= 3), .names = "{.col}_top2"))
 
@@ -1285,7 +1411,8 @@ conf_by_party_df <- map_dfr(names(conf_labels), function(col) svy_prop_by(data, 
 conf_party_order <- conf_by_party_df %>% group_by(item) %>% summarise(m = mean(pct), .groups = "drop") %>% arrange(m) %>% pull(item)
 conf_by_party_df <- conf_by_party_df %>% mutate(item = factor(item, levels = conf_party_order), pid3 = factor(pid3, levels = c("Dem", "Ind", "Rep")))
 
-p <- ggplot(conf_by_party_df, aes(x = pct, y = item, fill = pid3)) +
+p <- ggplot(conf_by_party_df %>% filter(pid3 != "Ind"), 
+            aes(x = pct, y = item, fill = pid3)) +
   geom_col(position = position_dodge(width = 0.75), width = 0.7) +
   scale_fill_manual(values = PID_COLORS, name = NULL) +
   scale_x_continuous(expand = expansion(mult = c(0, .06))) +
@@ -1298,7 +1425,50 @@ p
 write.csv(conf_by_party_df %>% pivot_wider(id_cols = item, names_from = pid3, values_from = pct), file.path(plots.dir, "conf_by_party_wide.csv"), row.names = FALSE)
 
 
+### ####################################################################################### ###
+## I.3. Top-2 by party ID, 2022 vs. 2024 vs. 2026 ----
+### ####################################################################################### ###
 
+# Crosses I.1's 3-year trend with I.2's party split: same cum_conf/_top2 columns as I.1, filtered
+# to Dem/Rep (Ind dropped per Jack's direction) before calling prop_by_year() per party, then
+# combined - the same filter-then-bind_rows pattern as the noncitizen/mode by-party charts above,
+# just with 2 party subsets instead of 3. One facet per item; year on x so each party's 3 points
+# (2022/2024/2026) trace as its own line.
+conf_trend_party_df <- map_dfr(names(conf_top2_labels), function(col) {
+  bind_rows(
+    prop_by_year(cum_conf %>% filter(pid3 == "Dem"), col) %>% mutate(pid3 = "Dem", .before = 1),
+    prop_by_year(cum_conf %>% filter(pid3 == "Rep"), col) %>% mutate(pid3 = "Rep", .before = 1)
+  ) %>% mutate(item = conf_top2_labels[[col]], .before = 1)
+})
+
+conf_trend_party_df <- conf_trend_party_df %>%
+  mutate(item = factor(item, levels = conf_trend_order),
+         pid3 = factor(pid3, levels = c("Dem", "Rep")))
+
+p <- ggplot(conf_trend_party_df, aes(x = year, y = pct, color = pid3, group = pid3)) +
+  geom_line(linewidth = 0.8) +
+  #geom_errorbar(aes(ymin = ci_low, ymax = ci_high), width = 0.15, alpha = 0.5) +
+  geom_point(size = 2.6) +
+  facet_wrap(~ item) +
+  scale_color_manual(values = PID_COLORS, name = NULL) +
+  scale_y_continuous(limits = c(50, 100), 
+                     expand = expansion(mult = c(0.04, .08))) +
+  labs(x = NULL, y = "Weighted % Confident",
+       title = "Democrats and Republicans Now Equally Confident that Votes will be Counted as Intended \nin Upcoming Elections",
+       subtitle = "Showing percentage of those \"very confident\" and \"somewhat confident\"") +
+  theme(legend.position = "top",
+        panel.grid.major.x = element_blank())
+p
+
+write.csv(conf_trend_party_df %>% pivot_wider(id_cols = c(item, year), names_from = pid3, values_from = pct),
+          file.path(plots.dir, "conf_trend_by_party_wide.csv"), row.names = FALSE)
+
+
+x <- conf_trend_party_df %>% 
+  select(-c(ci_low, ci_high, n)) %>% 
+  pivot_wider(names_from = pid3, 
+              values_from = pct) %>% 
+  mutate(diff = Dem-Rep)
 
 ##### #
 #### #
@@ -1352,11 +1522,13 @@ concern_combined_df <- concern_combined_df %>% mutate(item = factor(item, levels
 
 p <- ggplot(concern_combined_df, aes(x = pct, y = item)) +
   geom_line(aes(group = item), color = "grey75", linewidth = 0.6) +
-  geom_linerange(aes(xmin = ci_low, xmax = ci_high, color = year), linewidth = 2, alpha = 0.35) +
+  #geom_linerange(aes(xmin = ci_low, xmax = ci_high, color = year), linewidth = 2, alpha = 0.35) +
   geom_point(data = filter(concern_combined_df, year == "2024"), aes(color = year), size = 4.2, shape = 1, stroke = 1.4) +
   geom_point(data = filter(concern_combined_df, year == "2026"), aes(color = year), size = 3, shape = 16) +
   scale_color_manual(values = YEAR_COLORS, name = NULL) +
   scale_y_discrete(labels = wrap40) +
+  scale_x_continuous(breaks = seq(0, 100, 10),
+                     limits = c(40, 80)) +
   labs(x = "Weighted % Concerned", y = NULL,
        title = wrap_title("Concern About Election Problems, 2024 vs. 2026"),
        subtitle = wrap_subtitle("\"Concerned\" combines somewhat + very concerned. 4 items new to 2026 shown as single 2026-only points.")) +
@@ -1374,20 +1546,59 @@ write.csv(concern_combined_df %>% pivot_wider(id_cols = item, names_from = year,
 concern_by_party_df <- map_dfr(names(concern_labels_all), function(col) svy_prop_by(data, paste0(col, "_top2"), "pid3") %>% mutate(item = concern_labels_all[[col]], .before = 1))
 
 concern_party_order <- concern_by_party_df %>% group_by(item) %>% summarise(m = mean(pct), .groups = "drop") %>% arrange(m) %>% pull(item)
-concern_by_party_df <- concern_by_party_df %>% mutate(item = factor(item, levels = concern_party_order), pid3 = factor(pid3, levels = c("Dem", "Ind", "Rep")))
+concern_by_party_df <- concern_by_party_df %>% 
+  filter(pid3 != "Ind") %>% 
+  mutate(item = factor(item, levels = concern_party_order), 
+         pid3 = factor(pid3, levels = c("Dem", "Rep")))
 
-p <- ggplot(concern_by_party_df, aes(x = pct, y = item, fill = pid3)) +
-  geom_col(position = position_dodge(width = 0.75), width = 0.7) +
-  scale_fill_manual(values = PID_COLORS, name = NULL) +
-  scale_x_continuous(expand = expansion(mult = c(0, .06))) +
+# Wide, one row per item, just to place the gap label at the midpoint between Dem's and Rep's
+# points - the long concern_by_party_df above still drives the line/point layers directly.
+concern_party_diff_df <- concern_by_party_df %>%
+  select(item, pid3, pct) %>%
+  pivot_wider(names_from = pid3, values_from = pct) %>%
+  mutate(mid_pct = (Dem + Rep) / 2, diff = abs(Dem - Rep))
+
+p <- ggplot(concern_by_party_df, aes(y = item)) +
+  geom_line(aes(x = pct, group = item), color = "grey75", linewidth = 1) +
+  geom_point(aes(x = pct, color = pid3), size = 3.4) +
+  geom_text(data = concern_party_diff_df, aes(x = mid_pct, label = round(diff)),
+            vjust = -0.8, size = 3.1, color = "grey30") +
+  scale_color_manual(values = PID_COLORS, name = NULL) +
+  scale_x_continuous(limits = c(0, 100),
+                     expand = expansion(mult = c(0.02, .08))) +
   scale_y_discrete(labels = wrap40) +
   labs(x = "Weighted % Concerned", y = NULL,
-       title = wrap_title("Concern About Election Problems, by Party ID"),
-       subtitle = "2026 only; all 14 items, including the 4 new to 2026") +
-  theme(legend.position = "top")
+       title = "Concerns about the midterm election, by party ID",
+       subtitle = "") +
+  theme(legend.position = "top",
+        panel.grid.major.y = element_blank())
 p
 
-write.csv(concern_by_party_df %>% pivot_wider(id_cols = item, names_from = pid3, values_from = pct), file.path(plots.dir, "concern_by_party_wide.csv"), row.names = FALSE)
+write.csv(concern_party_diff_df, file.path(plots.dir, "concern_by_party_wide.csv"), row.names = FALSE)
+
+
+### ####################################################################################### ###
+## J.3. Top-2, all 14 items - 2026 only ----
+### ####################################################################################### ###
+
+# J.1's year comparison dropped, leaving one bar per item - the same 2026 values J.1 already
+# computed (concern_combined_df's year == "2026" rows cover all 14 items: the 10 comparable ones
+# alongside their 2024 point, the 4 new-to-2026 ones on their own already), so no re-estimation is
+# needed. concern_order is already 2026-pct-ascending, so the item factor carries over as-is.
+concern_2026_df <- concern_combined_df %>% filter(year == "2026")
+
+p <- ggplot(concern_2026_df, aes(x = pct, y = item)) +
+  #geom_errorbar(aes(xmin = ci_low, xmax = ci_high), orientation = "y", width = 0.2, linewidth = 0.8, color = "grey35", alpha = 0.6) +
+  geom_point(color = BAR_COLOR, size = 3.2) +
+  scale_x_continuous(limits = c(0, 100),
+                     expand = expansion(mult = c(0.02, .08))) +
+  scale_y_discrete(labels = wrap40) +
+  labs(x = "Weighted % Concerned", y = NULL,
+       title = wrap_title("Concern About Election Problems"),
+       subtitle = "2026 only; all 14 items, including the 4 new to 2026")
+p
+
+write.csv(concern_2026_df %>% select(item, pct, ci_low, ci_high, n), file.path(plots.dir, "concern_2026_wide.csv"), row.names = FALSE)
 
 
 
@@ -1534,6 +1745,235 @@ p <- ggplot(usps_policy_support_df, aes(x = pct, y = category)) +
 p
 
 write.csv(usps_policy_support_df %>% select(category, pct, ci_low, ci_high, n), file.path(plots.dir, "usps_policy_support_wide.csv"), row.names = FALSE)
+
+
+
+
+##### #
+#### #
+### ################################################################################################################################################# #
+# Part L. Miscellaneous calculations ------------------------------------------------------------------------------------------------------------------- ----
+### ################################################################################################################################################# #
+#### #
+##### #
+
+### ####################################################################################### ###
+## L.1. 2nd- and 3rd-choice sources, among those who ranked one source first ----
+### ####################################################################################### ###
+
+# No custom functions here on purpose (unlike everywhere else in this script) - every subsetting
+# step for every need x first-choice combination is written out on its own, so each one can be
+# read/checked in place rather than traced into a function defined elsewhere. "Everyone included"
+# (act+hyp battery values, both filtered to in_base rows) for each need's main sources battery.
+# For each of 3 needs x 2 first-choice items: filter to that need's long rows, pull the resp_ids
+# who ranked the first-choice item #1, then re-filter that same long table down to just those
+# resp_ids' rank-2 (then rank-3) rows and hand-build the weighted % - the same svydesign()/
+# svymean()/confint() calls factor_props() uses elsewhere, just written out instead of called.
+# n shrinks on its own between the 2nd- and 3rd-choice tables (not everyone who gave a #1 choice
+# gave a #2 or #3), and n_first (the #1 group's own size) is carried along for reference.
+
+# --- Registering and Voting ---------------------------------------------------------------------
+
+reg_long <- sources.long %>% filter(battery %in% c("reg_act", "reg_hyp"), in_base)
+
+# Online Search Engine first
+reg_search_first_ids <- reg_long %>% filter(rank == 1, item_tag == "search") %>% pull(resp_id)
+
+reg_search_2nd    <- reg_long %>% filter(resp_id %in% reg_search_first_ids, rank == 2) %>% mutate(display = as.factor(display))
+reg_search_2nd_des <- svydesign(ids = ~1, weights = ~weight, data = reg_search_2nd)
+reg_search_2nd_est <- svymean(~display, reg_search_2nd_des)
+reg_search_2nd_df <- tibble(
+  need = "Registering and Voting", first_choice = "Online Search Engine", followup = "2nd choice",
+  category = sub("^display", "", names(reg_search_2nd_est)),
+  pct      = as.numeric(reg_search_2nd_est) * 100,
+  ci_low   = confint(reg_search_2nd_est)[, 1] * 100,
+  ci_high  = confint(reg_search_2nd_est)[, 2] * 100,
+  n        = nrow(reg_search_2nd),
+  n_first  = length(reg_search_first_ids)
+)
+
+reg_search_3rd    <- reg_long %>% filter(resp_id %in% reg_search_first_ids, rank == 3) %>% mutate(display = as.factor(display))
+reg_search_3rd_des <- svydesign(ids = ~1, weights = ~weight, data = reg_search_3rd)
+reg_search_3rd_est <- svymean(~display, reg_search_3rd_des)
+reg_search_3rd_df <- tibble(
+  need = "Registering and Voting", first_choice = "Online Search Engine", followup = "3rd choice",
+  category = sub("^display", "", names(reg_search_3rd_est)),
+  pct      = as.numeric(reg_search_3rd_est) * 100,
+  ci_low   = confint(reg_search_3rd_est)[, 1] * 100,
+  ci_high  = confint(reg_search_3rd_est)[, 2] * 100,
+  n        = nrow(reg_search_3rd),
+  n_first  = length(reg_search_first_ids)
+)
+
+# Local Election Officials first
+reg_local_first_ids <- reg_long %>% filter(rank == 1, item_tag == "local_officials") %>% pull(resp_id)
+
+reg_local_2nd    <- reg_long %>% filter(resp_id %in% reg_local_first_ids, rank == 2) %>% mutate(display = as.factor(display))
+reg_local_2nd_des <- svydesign(ids = ~1, weights = ~weight, data = reg_local_2nd)
+reg_local_2nd_est <- svymean(~display, reg_local_2nd_des)
+reg_local_2nd_df <- tibble(
+  need = "Registering and Voting", first_choice = "Local Election Officials", followup = "2nd choice",
+  category = sub("^display", "", names(reg_local_2nd_est)),
+  pct      = as.numeric(reg_local_2nd_est) * 100,
+  ci_low   = confint(reg_local_2nd_est)[, 1] * 100,
+  ci_high  = confint(reg_local_2nd_est)[, 2] * 100,
+  n        = nrow(reg_local_2nd),
+  n_first  = length(reg_local_first_ids)
+)
+
+reg_local_3rd    <- reg_long %>% filter(resp_id %in% reg_local_first_ids, rank == 3) %>% mutate(display = as.factor(display))
+reg_local_3rd_des <- svydesign(ids = ~1, weights = ~weight, data = reg_local_3rd)
+reg_local_3rd_est <- svymean(~display, reg_local_3rd_des)
+reg_local_3rd_df <- tibble(
+  need = "Registering and Voting", first_choice = "Local Election Officials", followup = "3rd choice",
+  category = sub("^display", "", names(reg_local_3rd_est)),
+  pct      = as.numeric(reg_local_3rd_est) * 100,
+  ci_low   = confint(reg_local_3rd_est)[, 1] * 100,
+  ci_high  = confint(reg_local_3rd_est)[, 2] * 100,
+  n        = nrow(reg_local_3rd),
+  n_first  = length(reg_local_first_ids)
+)
+
+# --- How Elections Are Run ----------------------------------------------------------------------
+
+run_long <- sources.long %>% filter(battery %in% c("run_act", "run_hyp"), in_base)
+
+# Online Search Engine first
+run_search_first_ids <- run_long %>% filter(rank == 1, item_tag == "search") %>% pull(resp_id)
+
+run_search_2nd    <- run_long %>% filter(resp_id %in% run_search_first_ids, rank == 2) %>% mutate(display = as.factor(display))
+run_search_2nd_des <- svydesign(ids = ~1, weights = ~weight, data = run_search_2nd)
+run_search_2nd_est <- svymean(~display, run_search_2nd_des)
+run_search_2nd_df <- tibble(
+  need = "How Elections Are Run", first_choice = "Online Search Engine", followup = "2nd choice",
+  category = sub("^display", "", names(run_search_2nd_est)),
+  pct      = as.numeric(run_search_2nd_est) * 100,
+  ci_low   = confint(run_search_2nd_est)[, 1] * 100,
+  ci_high  = confint(run_search_2nd_est)[, 2] * 100,
+  n        = nrow(run_search_2nd),
+  n_first  = length(run_search_first_ids)
+)
+
+run_search_3rd    <- run_long %>% filter(resp_id %in% run_search_first_ids, rank == 3) %>% mutate(display = as.factor(display))
+run_search_3rd_des <- svydesign(ids = ~1, weights = ~weight, data = run_search_3rd)
+run_search_3rd_est <- svymean(~display, run_search_3rd_des)
+run_search_3rd_df <- tibble(
+  need = "How Elections Are Run", first_choice = "Online Search Engine", followup = "3rd choice",
+  category = sub("^display", "", names(run_search_3rd_est)),
+  pct      = as.numeric(run_search_3rd_est) * 100,
+  ci_low   = confint(run_search_3rd_est)[, 1] * 100,
+  ci_high  = confint(run_search_3rd_est)[, 2] * 100,
+  n        = nrow(run_search_3rd),
+  n_first  = length(run_search_first_ids)
+)
+
+# Local Election Officials first
+run_local_first_ids <- run_long %>% filter(rank == 1, item_tag == "local_officials") %>% pull(resp_id)
+
+run_local_2nd    <- run_long %>% filter(resp_id %in% run_local_first_ids, rank == 2) %>% mutate(display = as.factor(display))
+run_local_2nd_des <- svydesign(ids = ~1, weights = ~weight, data = run_local_2nd)
+run_local_2nd_est <- svymean(~display, run_local_2nd_des)
+run_local_2nd_df <- tibble(
+  need = "How Elections Are Run", first_choice = "Local Election Officials", followup = "2nd choice",
+  category = sub("^display", "", names(run_local_2nd_est)),
+  pct      = as.numeric(run_local_2nd_est) * 100,
+  ci_low   = confint(run_local_2nd_est)[, 1] * 100,
+  ci_high  = confint(run_local_2nd_est)[, 2] * 100,
+  n        = nrow(run_local_2nd),
+  n_first  = length(run_local_first_ids)
+)
+
+run_local_3rd    <- run_long %>% filter(resp_id %in% run_local_first_ids, rank == 3) %>% mutate(display = as.factor(display))
+run_local_3rd_des <- svydesign(ids = ~1, weights = ~weight, data = run_local_3rd)
+run_local_3rd_est <- svymean(~display, run_local_3rd_des)
+run_local_3rd_df <- tibble(
+  need = "How Elections Are Run", first_choice = "Local Election Officials", followup = "3rd choice",
+  category = sub("^display", "", names(run_local_3rd_est)),
+  pct      = as.numeric(run_local_3rd_est) * 100,
+  ci_low   = confint(run_local_3rd_est)[, 1] * 100,
+  ci_high  = confint(run_local_3rd_est)[, 2] * 100,
+  n        = nrow(run_local_3rd),
+  n_first  = length(run_local_first_ids)
+)
+
+# --- Who Won an Election -------------------------------------------------------------------------
+
+won_long <- sources.long %>% filter(battery %in% c("won_act", "won_hyp"), in_base)
+
+# Online Search Engine first
+won_search_first_ids <- won_long %>% filter(rank == 1, item_tag == "search") %>% pull(resp_id)
+
+won_search_2nd    <- won_long %>% filter(resp_id %in% won_search_first_ids, rank == 2) %>% mutate(display = as.factor(display))
+won_search_2nd_des <- svydesign(ids = ~1, weights = ~weight, data = won_search_2nd)
+won_search_2nd_est <- svymean(~display, won_search_2nd_des)
+won_search_2nd_df <- tibble(
+  need = "Who Won an Election", first_choice = "Online Search Engine", followup = "2nd choice",
+  category = sub("^display", "", names(won_search_2nd_est)),
+  pct      = as.numeric(won_search_2nd_est) * 100,
+  ci_low   = confint(won_search_2nd_est)[, 1] * 100,
+  ci_high  = confint(won_search_2nd_est)[, 2] * 100,
+  n        = nrow(won_search_2nd),
+  n_first  = length(won_search_first_ids)
+)
+
+won_search_3rd    <- won_long %>% filter(resp_id %in% won_search_first_ids, rank == 3) %>% mutate(display = as.factor(display))
+won_search_3rd_des <- svydesign(ids = ~1, weights = ~weight, data = won_search_3rd)
+won_search_3rd_est <- svymean(~display, won_search_3rd_des)
+won_search_3rd_df <- tibble(
+  need = "Who Won an Election", first_choice = "Online Search Engine", followup = "3rd choice",
+  category = sub("^display", "", names(won_search_3rd_est)),
+  pct      = as.numeric(won_search_3rd_est) * 100,
+  ci_low   = confint(won_search_3rd_est)[, 1] * 100,
+  ci_high  = confint(won_search_3rd_est)[, 2] * 100,
+  n        = nrow(won_search_3rd),
+  n_first  = length(won_search_first_ids)
+)
+
+# Local Election Officials first
+won_local_first_ids <- won_long %>% filter(rank == 1, item_tag == "local_officials") %>% pull(resp_id)
+
+won_local_2nd    <- won_long %>% filter(resp_id %in% won_local_first_ids, rank == 2) %>% mutate(display = as.factor(display))
+won_local_2nd_des <- svydesign(ids = ~1, weights = ~weight, data = won_local_2nd)
+won_local_2nd_est <- svymean(~display, won_local_2nd_des)
+won_local_2nd_df <- tibble(
+  need = "Who Won an Election", first_choice = "Local Election Officials", followup = "2nd choice",
+  category = sub("^display", "", names(won_local_2nd_est)),
+  pct      = as.numeric(won_local_2nd_est) * 100,
+  ci_low   = confint(won_local_2nd_est)[, 1] * 100,
+  ci_high  = confint(won_local_2nd_est)[, 2] * 100,
+  n        = nrow(won_local_2nd),
+  n_first  = length(won_local_first_ids)
+)
+
+won_local_3rd    <- won_long %>% filter(resp_id %in% won_local_first_ids, rank == 3) %>% mutate(display = as.factor(display))
+won_local_3rd_des <- svydesign(ids = ~1, weights = ~weight, data = won_local_3rd)
+won_local_3rd_est <- svymean(~display, won_local_3rd_des)
+won_local_3rd_df <- tibble(
+  need = "Who Won an Election", first_choice = "Local Election Officials", followup = "3rd choice",
+  category = sub("^display", "", names(won_local_3rd_est)),
+  pct      = as.numeric(won_local_3rd_est) * 100,
+  ci_low   = confint(won_local_3rd_est)[, 1] * 100,
+  ci_high  = confint(won_local_3rd_est)[, 2] * 100,
+  n        = nrow(won_local_3rd),
+  n_first  = length(won_local_first_ids)
+)
+
+# --- Combine the 12 small tables just for viewing/export -----------------------------------------
+
+secondthird_df <- bind_rows(
+  reg_search_2nd_df, reg_search_3rd_df, reg_local_2nd_df, reg_local_3rd_df,
+  run_search_2nd_df, run_search_3rd_df, run_local_2nd_df, run_local_3rd_df,
+  won_search_2nd_df, won_search_3rd_df, won_local_2nd_df, won_local_3rd_df
+) %>%
+  mutate(need     = factor(need, levels = c("Registering and Voting", "How Elections Are Run", "Who Won an Election")),
+         followup = factor(followup, levels = c("2nd choice", "3rd choice"))) %>%
+  arrange(need, first_choice, followup, desc(pct))
+
+print(secondthird_df %>% mutate(pct = round(pct, 1)) %>% select(need, first_choice, followup, category, pct, n, n_first),
+      n = 300, width = 200)
+
+write.csv(secondthird_df %>% select(need, first_choice, followup, category, pct, ci_low, ci_high, n, n_first),
+          file.path(plots.dir, "secondthird_choices_wide.csv"), row.names = FALSE)
 
 
 
