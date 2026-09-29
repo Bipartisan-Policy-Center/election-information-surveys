@@ -44,6 +44,17 @@
   .legend span { display: inline-flex; align-items: center; gap: .4em; }
   .legend i { width: 18px; height: 3px; border-radius: 2px; background: currentColor; flex: none; }
 
+  /* "All respondents": a dotted line (border, not the solid-bar background the other two use)
+     with a small hollow-circle marker centered on it, matching the chart's own dotted/hollow-
+     circle line for that series - a plain solid swatch would look identical to Dem/Rep's. The
+     circle's background stays transparent so the dotted line still shows through its middle,
+     same as a real hollow point sitting on its own line. */
+  .legend i.dotted { position: relative; height: 0; background: none; border-top: 2px dotted currentColor; }
+  .legend i.dotted::after {
+    content: ""; position: absolute; top: 0; left: 50%; width: 6px; height: 6px;
+    margin: -3px 0 0 -3px; border: 1.5px solid currentColor; border-radius: 50%; background: transparent;
+  }
+
   .panels { display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .panels > iframe { width: 0; min-width: 100% !important; border: none; display: block; }
 
@@ -61,12 +72,13 @@
 </style>
 </head>
 <body>
-  <p class="title">Democrats and Republicans are now equally confident that votes will be counted as intended.</p>
-  <p class="deck">Are you confident that <b>&#95;&#95;&#95;&#95;</b> will be counted as intended?</p>
+  <p class="title">How confident are you that &#95;&#95;&#95;&#95; will be counted as intended?</p>
+  <p class="deck">Weighted percentage of Democrats and Republicans who responded &ldquo;very confident&rdquo; or &ldquo;somewhat confident.&rdquo;</p>
 
   <p class="legend" aria-label="Legend">
     <span style="color:#2a78d6"><i></i><span style="color:#181818">Democratic</span></span>
     <span style="color:#d03b3b"><i></i><span style="color:#181818">Republican</span></span>
+    <span style="color:#999999"><i class="dotted"></i><span style="color:#181818">All respondents</span></span>
   </p>
 
   <div class="panels">
