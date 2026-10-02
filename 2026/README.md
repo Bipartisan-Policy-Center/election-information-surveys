@@ -80,6 +80,7 @@ The scripts create an `output/` folder holding the cleaned and combined datasets
 - Estimates for a single year use the survey weights Morning Consult delivered. Most cross-year comparisons use the common weights built by `02_common_weights.R`, and the comments in `04_analysis.R` identify the weight used for each estimate.
 - In Figures 3 and 4, "confident" and "concerned" combine the "very" and "somewhat" response options.
 - The 2024 comparisons use the second of BPC's two October 2024 surveys. See the top-level README for details on both.
+- `04_analysis.R` prints several warnings reading "glm.fit: algorithm did not converge" in its appendix. They are expected and do not affect the figures in the article. The note at the top of the script explains why.
 
 ## Questions
 

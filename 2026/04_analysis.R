@@ -48,6 +48,13 @@
 # "output" folder, which the scripts create if it does not exist.
 #
 # Required packages: tidyverse, survey, zipcodeR (used by 03_cumulative_data.R and 01_clean_data.R), and readxl.
+#
+# Expected warnings: Appendix B and Appendix C.2 (the "ranked #1" versions of Figure 1) print several
+# warnings reading "glm.fit: algorithm did not converge." They occur because no respondent ranked
+# "Other" or "Don't know" first, and, among never-seekers, no respondent ranked "Advocacy Organization"
+# first for "Who Won an Election." Those estimates are exactly 0%, which the logit-based confidence
+# interval cannot fit. "Other" and "Don't know" are dropped from the figures, and the warnings do not
+# affect Figures 1 through 4 or the standalone statistics.
 
 library(tidyverse)
 library(survey)
