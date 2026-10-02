@@ -1,2 +1,10 @@
 __pycache__
 .DS_Store
+.Rproj.user
+.env
+.venv
+2026/output/
+Rplots.pdf
+.Rhistory
+.RData
+docs/superpowers/
