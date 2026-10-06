@@ -1,6 +1,12 @@
 # BPC Election Information Surveys
 
-This repository contains the data, analysis, and visualizations for surveys conducted by the Bipartisan Policy Center on where Americans seek election information. Three surveys—similar but with slight variations—were carried out by Morning Consult in October 2022, December 2023, and October 2024.
+This repository contains the data, analysis, and visualizations for surveys conducted by the Bipartisan Policy Center on where Americans seek election information. Four surveys—similar but with slight variations—were carried out by Morning Consult in October 2022, December 2023, October 2024, and September 2026.
+
+## September 2026
+
+Our 2026 poll was conducted by Morning Consult between September 2-4, 2026 among a sample of 3,144 registered voters nationally. Results from the full survey have a margin of error of plus or minus 2 percentage points.
+
+The data, codebooks, survey instrument, and R code that reproduce the figures and statistics in the BPC article "What Voters Think Ahead of the 2026 Midterms: Election Information, Confidence, and Concerns" are in the [2026 folder](2026/). See the [2026 README](2026/README.md) for instructions.
 
 ## October 2024
 
@@ -35,7 +41,9 @@ Results and analysis here: Katie Harbath, Collier Fernekes, Rachel Orey, Mara Su
 
 The repository is organized by year, with each year containing folders for raw and processed data, as well as codebooks and analysis files specific to that survey year.
 
-The general structure of each year's folder is as follows.
+The 2026 folder is the exception. It is a self-contained set of replication materials, with numbered R scripts, a `data/` folder, and a `documentation/` folder, described in its own [README](2026/README.md).
+
+The general structure of the other years' folders is as follows.
 ``` yml
 BPC-ELECTION-INFORMATION-SURVEYS/
 ├── year/
@@ -70,3 +78,5 @@ BPC-ELECTION-INFORMATION-SURVEYS/
 ## Survey methodology
 
 The interviews were conducted online with data weighted to approximate a target sample of registered voters based on age and gender, educational attainment, race, marital status, homeownership, race by education, 2020 presidential vote, and region. The results have a margin of error of ±2 percentage points, except for the 2022 state oversamples which have a margin of error of ±3-4 percentage points.
+
+For 2026, the data were weighted to approximate a target sample of registered voters based on gender, age, race, educational attainment, region, gender by age, and race by educational attainment.

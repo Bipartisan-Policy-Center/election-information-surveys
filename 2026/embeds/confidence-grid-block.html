@@ -1,0 +1,139 @@
+<!-- BPC: 4-up Datawrapper grid — paste into a WordPress "Custom HTML" block -->
+<style>
+  /* The same Inter Tight the BPC Datawrapper theme uses, self-hosted by the theme */
+  @font-face {
+    font-family: "Inter Tight BPC";
+    font-weight: 400; font-style: normal; font-display: swap;
+    src: url("https://static.dwcdn.net/custom/themes/bipartisan-policy-center/InterTight-Regular.woff2") format("woff2"),
+         url("https://static.dwcdn.net/custom/themes/bipartisan-policy-center/InterTight-Regular.woff") format("woff");
+  }
+  @font-face {
+    font-family: "Inter Tight BPC";
+    font-weight: 700; font-style: normal; font-display: swap;
+    src: url("https://static.dwcdn.net/custom/themes/bipartisan-policy-center/InterTight-Bold.woff2") format("woff2"),
+         url("https://static.dwcdn.net/custom/themes/bipartisan-policy-center/InterTight-Bold.woff") format("woff");
+  }
+
+  /* Selectors are doubled and typography is !important so the host theme's
+     .entry-content p rules (higher specificity) cannot override them. */
+  /* Establishes a query container so the breakpoints below measure the block's
+     own width. The host theme's content column does not track the viewport, so
+     viewport media queries fire at the wrong moments. */
+  .bpc-dwgrid {
+    margin: 1.5em 0;
+    container-type: inline-size;
+    container-name: bpcgrid;
+  }
+
+  .bpc-dwgrid p.bpc-dwgrid__title {
+    font-family: "Inter Tight BPC", "Inter Tight", sans-serif !important;
+    font-weight: 700 !important;
+    font-size: 22px !important;
+    line-height: 1.25 !important;
+    color: #000 !important;
+    margin: 0 0 .25em !important;
+    max-width: 46ch;
+  }
+
+  .bpc-dwgrid p.bpc-dwgrid__deck {
+    font-family: "Source Serif 4", "Source Serif", Georgia, serif !important;
+    font-weight: 400 !important;
+    font-size: 15px !important;
+    line-height: 1.4 !important;
+    color: #181818 !important;
+    margin: 0 0 .6em !important;
+  }
+  .bpc-dwgrid p.bpc-dwgrid__deck b {
+    font-family: "Inter Tight BPC", "Inter Tight", sans-serif !important;
+    font-weight: 700 !important;
+  }
+
+  .bpc-dwgrid p.bpc-dwgrid__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25em;
+    margin: 0 0 1.25em !important;
+    font-family: "Inter Tight BPC", "Inter Tight", sans-serif !important;
+    font-weight: 400 !important;
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+    color: #181818 !important;
+  }
+  .bpc-dwgrid .bpc-dwgrid__legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: .4em;
+    font: inherit !important;
+  }
+  .bpc-dwgrid .bpc-dwgrid__legend i {
+    width: 18px; height: 3px; border-radius: 2px;
+    background: currentColor;
+    flex: none;
+  }
+
+  /* Columns are chosen from the panel's own width, not the viewport: the host
+     theme's content column is what matters and it does not track the viewport.
+     190px is above the ~180px width at which the longest panel label wraps to
+     two lines, which knocks the plot areas out of alignment. */
+  .bpc-dwgrid .bpc-dwgrid__panels {
+    display: grid;
+    gap: 16px;
+    /* Fallback for browsers without container queries: reflows on panel width,
+       but may land on an awkward 3 + 1. Overridden below where supported. */
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  }
+
+  /* 4 across needs 4 x 190px panels + 3 x 16px gaps = 808px of container.
+     Below that, go straight to 2 x 2 -- never 3 with an orphan. */
+  @container bpcgrid (min-width: 808px) {
+    .bpc-dwgrid .bpc-dwgrid__panels { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+  @container bpcgrid (max-width: 807.98px) {
+    .bpc-dwgrid .bpc-dwgrid__panels { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  /* 2 across needs 2 x 190px + 16px = 396px. Below that, single column. */
+  @container bpcgrid (max-width: 395.98px) {
+    .bpc-dwgrid .bpc-dwgrid__panels { grid-template-columns: minmax(0, 1fr); }
+  }
+  .bpc-dwgrid .bpc-dwgrid__panels > iframe {
+    width: 0;
+    min-width: 100% !important;
+    border: none;
+    display: block;
+  }
+
+  .bpc-dwgrid p.bpc-dwgrid__note {
+    font-family: "Source Serif 4", "Source Serif", Georgia, serif !important;
+    font-weight: 400 !important;
+    font-size: 13px !important;
+    line-height: 1.4 !important;
+    color: #666 !important;
+    margin: 1em 0 0 !important;
+  }
+  .bpc-dwgrid p.bpc-dwgrid__note a {
+    color: inherit !important;
+    text-decoration: underline;
+  }
+
+</style>
+
+<div class="bpc-dwgrid">
+  <p class="bpc-dwgrid__title">Democrats and Republicans are now equally confident that votes will be counted as intended.</p>
+  <p class="bpc-dwgrid__deck">Are you confident that <b>&#95;&#95;&#95;&#95;</b> will be counted as intended?</p>
+
+  <p class="bpc-dwgrid__legend" aria-label="Legend">
+    <span style="color:#2a78d6"><i></i><span style="color:#181818">Democratic</span></span>
+    <span style="color:#d03b3b"><i></i><span style="color:#181818">Republican</span></span>
+  </p>
+
+  <div class="bpc-dwgrid__panels">
+    <iframe title="Your own vote — confidence votes will be counted as intended, by party ID" aria-label="Line chart" id="datawrapper-chart-7ZMDn" src="https://datawrapper.dwcdn.net/7ZMDn/" scrolling="no" frameborder="0" style="width: 0; min-width: 100% !important; border: none;" height="372" data-external="1"></iframe>
+    <iframe title="Votes in your community — confidence votes will be counted as intended, by party ID" aria-label="Line chart" id="datawrapper-chart-7I5I7" src="https://datawrapper.dwcdn.net/7I5I7/" scrolling="no" frameborder="0" style="width: 0; min-width: 100% !important; border: none;" height="372" data-external="1"></iframe>
+    <iframe title="Votes in your state — confidence votes will be counted as intended, by party ID" aria-label="Line chart" id="datawrapper-chart-ea5ef" src="https://datawrapper.dwcdn.net/ea5ef/" scrolling="no" frameborder="0" style="width: 0; min-width: 100% !important; border: none;" height="372" data-external="1"></iframe>
+    <iframe title="Votes nationwide — confidence votes will be counted as intended, by party ID" aria-label="Line chart" id="datawrapper-chart-wUOKP" src="https://datawrapper.dwcdn.net/wUOKP/" scrolling="no" frameborder="0" style="width: 0; min-width: 100% !important; border: none;" height="372" data-external="1"></iframe>
+  </div>
+
+  <p class="bpc-dwgrid__note">Source: <a href="https://github.com/Bipartisan-Policy-Center/election-information-surveys" target="_blank" rel="noopener">BPC 2022/2024/2026 Election Information Surveys</a>. &ldquo;Confident&rdquo; combines somewhat and very confident. Independents excluded.</p>
+</div>
+
+<script type="text/javascript">(function(){function e(){window.addEventListener(`message`,function(e){if(e.data[`datawrapper-height`]!==void 0){var t=document.querySelectorAll(`iframe`);for(var n in e.data[`datawrapper-height`])for(var r=0,i;i=t[r];r++)if(i.contentWindow===e.source){var a=e.data[`datawrapper-height`][n]+`px`;i.style.height=a}}})}e()})();</script>
