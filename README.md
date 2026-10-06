@@ -6,7 +6,7 @@ This repository contains the data, analysis, and visualizations for surveys cond
 
 Our 2026 poll was conducted by Morning Consult between September 2-4, 2026 among a sample of 3,144 registered voters nationally. Results from the full survey have a margin of error of plus or minus 2 percentage points.
 
-The data, codebooks, survey instrument, and R code that reproduce the figures and statistics in the BPC article "What Voters Think Ahead of the 2026 Midterms: Election Information, Confidence, and Concerns" are in the [2026 folder](2026/). See the [2026 README](2026/README.md) for instructions.
+The data, codebooks, survey instrument, and R code that reproduce the figures and statistics in the BPC article "[What Voters Think Ahead of the 2026 Midterms: Election Information, Confidence, and Concerns](https://bipartisanpolicy.org/explainer/what-voters-think-ahead-of-the-2026-midterms-election-information-confidence-and-concerns/)" are in the [2026 folder](2026/). See the [2026 README](2026/README.md) for instructions.
 
 ## October 2024
 
