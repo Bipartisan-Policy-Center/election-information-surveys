@@ -1,6 +1,6 @@
 # 2026 Election Information Survey: Replication Materials
 
-This folder contains the data, documentation, and R code needed to reproduce the figures and statistics in the Bipartisan Policy Center's article "What Voters Think Ahead of the 2026 Midterms: Election Information, Confidence, and Concerns." The article draws on a 2026 survey of 3,144 registered voters, conducted by Morning Consult for BPC, and compares the results with BPC's 2022 and 2024 surveys of registered voters.
+This folder contains the data, documentation, and R code needed to reproduce the figures and statistics in the Bipartisan Policy Center's article "[What Voters Think Ahead of the 2026 Midterms: Election Information, Confidence, and Concerns.](https://bipartisanpolicy.org/explainer/what-voters-think-ahead-of-the-2026-midterms-election-information-confidence-and-concerns/)" The article draws on a 2026 survey of 3,144 registered voters, conducted by Morning Consult for BPC, and compares the results with BPC's 2022 and 2024 surveys of registered voters.
 
 ## Contents
 
